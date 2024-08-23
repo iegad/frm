@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,7 @@ var (
 
 	lvfnmap = map[int]string{}   // 当前level值 对应的文件名
 	lvfmap  = map[int]*os.File{} // 当前level值 对应的文件句柄
+	fmtx    = sync.Mutex{}
 )
 
 func SetPath(path string) {
@@ -71,6 +73,8 @@ func Fatal(args ...interface{}) {
 }
 
 func getFile(lv int, tn time.Time) *os.File {
+	fmtx.Lock()
+	defer fmtx.Unlock()
 	fname := fmt.Sprintf("%s/%s.%s", logPath, tn.Format("2006-01-02"), lvmap[lv])
 	if fname != lvfnmap[lv] {
 		if lvfmap[lv] != nil {

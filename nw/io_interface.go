@@ -19,7 +19,7 @@ type IService interface {
 
 	// 接收数据事件
 	//  - 当 read 到有效数据时触发
-	//  - 当该接口返回 false 时, 瘵主动关闭会话
+	//  - 当该接口返回 false 时, 将主动关闭会话
 	OnData(sess ISess, data []byte) bool
 
 	// 服务启动事件
