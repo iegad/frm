@@ -51,6 +51,24 @@ func Post(url string, req string, rsp any) error {
 	return json.Unmarshal(body, rsp)
 }
 
+func PostRaw(url string, req string) (string, error) {
+	log.Debug("POST: %v", url)
+	log.Debug("PARAMS: %v", req)
+
+	ret, err := http.Post(url, "application/x-www-form-urlencoded", strings.NewReader(req))
+	if err != nil {
+		return "", err
+	}
+	defer ret.Body.Close()
+
+	body, err := io.ReadAll(ret.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
+}
+
 func Get(url string, rsp any) error {
 	ret, err := http.Get(url)
 	if err != nil {
