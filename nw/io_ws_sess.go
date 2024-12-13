@@ -16,10 +16,11 @@ type wsSess struct {
 	sendSeq  int64
 	conn     *websocket.Conn
 	timeout  time.Duration
+	realIP   string
 	userData interface{}
 }
 
-func newWsSess(conn *websocket.Conn, timeout time.Duration) (*wsSess, error) {
+func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*wsSess, error) {
 	rawConn, err := conn.NetConn().(*net.TCPConn).SyscallConn()
 	if err != nil {
 		log.Error(err)
@@ -31,6 +32,11 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration) (*wsSess, error) {
 		ch <- int64(fd)
 	})
 
+	ip := ""
+	if len(realIp) == 1 && len(realIp[0]) > 0 {
+		ip = realIp[0]
+	}
+
 	fd := <-ch
 
 	return &wsSess{
@@ -40,6 +46,7 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration) (*wsSess, error) {
 		conn:     conn,
 		timeout:  timeout,
 		userData: nil,
+		realIP:   ip,
 	}, nil
 }
 
@@ -53,7 +60,10 @@ func (this_ *wsSess) LocalAddr() net.Addr {
 
 func (this_ *wsSess) RemoteAddr() net.Addr {
 	return this_.conn.RemoteAddr()
+}
 
+func (this_ *wsSess) RemoteIP() string {
+	return this_.realIP
 }
 
 func (this_ *wsSess) Close() error {

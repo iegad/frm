@@ -43,6 +43,8 @@ type ISess interface {
 	// 远端地址
 	RemoteAddr() net.Addr
 
+	RemoteIP() string
+
 	// 关闭会话
 	Close() error
 

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -305,6 +306,11 @@ func (this_ *IOServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	realIp := r.Header.Get("X-Forwarded-For")
+	if strings.Contains(realIp, "127.0.0.1") || len(realIp) == 0 {
+		realIp = r.Header.Get("X-real-ip")
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -312,17 +318,19 @@ func (this_ *IOServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	this_.wg.Add(1)
-	go this_.wsConnHandle(conn, &this_.wg)
-}
 
-// websocket conn 句柄
-func (this_ *IOServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup) {
-	sess, err := newWsSess(conn, this_.timeout)
+	sess, err := newWsSess(conn, this_.timeout, realIp)
 	if err != nil {
 		log.Error(err)
 		conn.Close()
 		return
 	}
+
+	go this_.wsConnHandle(sess, &this_.wg)
+}
+
+// websocket conn 句柄
+func (this_ *IOServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 
 	atomic.AddInt32(&this_.connCount, 1)
 	var rbuf []byte
@@ -334,7 +342,7 @@ func (this_ *IOServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup) {
 		wg.Done()
 	}()
 
-	err = this_.service.OnConnected(sess)
+	err := this_.service.OnConnected(sess)
 	if err != nil {
 		log.Error(err)
 		return
@@ -347,7 +355,7 @@ func (this_ *IOServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup) {
 		}
 
 		if !this_.service.OnData(sess, rbuf) {
-			log.Error("process conn[%v] data failed then will ACTIVE close", conn.RemoteAddr())
+			log.Error("process conn[%v] data failed then will ACTIVE close", sess.RemoteAddr())
 			break
 		}
 	}

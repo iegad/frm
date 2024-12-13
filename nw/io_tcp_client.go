@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -22,6 +23,7 @@ type TcpClient struct {
 	conn         *net.TCPConn
 	reader       *bufio.Reader
 	userData     interface{}
+	realIP       string
 }
 
 func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient, error) {
@@ -57,6 +59,8 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 
 	fd := <-ch
 
+	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
+
 	return &TcpClient{
 		tcpHeadBlend: blend,
 		fd:           fd,
@@ -66,6 +70,7 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 		conn:         conn.(*net.TCPConn),
 		reader:       bufio.NewReader(conn),
 		userData:     nil,
+		realIP:       realIP,
 	}, nil
 }
 
@@ -83,6 +88,10 @@ func (this_ *TcpClient) RemoteAddr() net.Addr {
 
 func (this_ *TcpClient) Close() error {
 	return this_.conn.Close()
+}
+
+func (this_ *TcpClient) RemoteIP() string {
+	return this_.realIP
 }
 
 func (this_ *TcpClient) Write(data []byte) (int, error) {

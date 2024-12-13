@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -21,6 +22,7 @@ type tcpSess struct {
 	conn     *net.TCPConn
 	reader   *bufio.Reader
 	userData interface{}
+	realIP   string
 }
 
 func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSess, error) {
@@ -41,6 +43,8 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 
 	fd := <-ch
 
+	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
+
 	return &tcpSess{
 		blend:    blend,
 		fd:       fd,
@@ -50,6 +54,7 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 		conn:     conn,
 		reader:   bufio.NewReader(conn),
 		userData: nil,
+		realIP:   realIP,
 	}, nil
 }
 
@@ -63,6 +68,10 @@ func (this_ *tcpSess) LocalAddr() net.Addr {
 
 func (this_ *tcpSess) RemoteAddr() net.Addr {
 	return this_.conn.RemoteAddr()
+}
+
+func (this_ *tcpSess) RemoteIP() string {
+	return this_.realIP
 }
 
 func (this_ *tcpSess) Close() error {
