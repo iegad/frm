@@ -5,9 +5,9 @@ import (
 )
 
 type basicResponse struct {
-	Code  int32       `json:"code"`
-	Error string      `json:"error,omitempty"`
-	Data  interface{} `json:"data,omitempty"`
+	Code  int32       `json:"Code"`
+	Error string      `json:"Error,omitempty"`
+	Data  interface{} `json:"Data,omitempty"`
 }
 
 func Response(c *gin.Context, code int32, err string, data interface{}) {

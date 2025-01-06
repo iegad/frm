@@ -34,6 +34,11 @@ var (
 
 func SetPath(path string) {
 	n := len(path)
+
+	if n == 0 {
+		return
+	}
+
 	if path[n-1:n] == "/" {
 		logPath = path[:n-1]
 	}
