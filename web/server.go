@@ -15,13 +15,13 @@ type Server struct {
 	stMtx    sync.Mutex
 }
 
-func NewServer(host string, release bool) (*Server, error) {
+func NewServer(host string, release ...bool) (*Server, error) {
 	addr, err := net.ResolveTCPAddr("tcp", host)
 	if err != nil {
 		return nil, err
 	}
 
-	if release {
+	if len(release) > 0 && release[0] {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
