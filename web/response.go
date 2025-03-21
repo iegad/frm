@@ -10,10 +10,15 @@ type basicResponse struct {
 	Data  interface{} `json:"Data,omitempty"`
 }
 
-func Response(c *gin.Context, code int32, err string, data interface{}) {
+func Response(c *gin.Context, code int32, err string, data ...any) {
+	var d any = nil
+	if len(data) == 1 {
+		d = data[0]
+	}
+
 	c.JSON(200, &basicResponse{
 		Code:  code,
 		Error: err,
-		Data:  data,
+		Data:  d,
 	})
 }
