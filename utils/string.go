@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"strings"
 	"unsafe"
 )
 
@@ -16,4 +17,13 @@ func Bytes2Str(b []byte) *string {
 func JSON(v interface{}) string {
 	jstr, _ := json.Marshal(v)
 	return string(jstr)
+}
+
+func GetFileSuffix(fname string) string {
+	idx := strings.LastIndex(fname, ".")
+	if idx < 0 {
+		return ""
+	}
+
+	return strings.ToLower(fname[idx+1:])
 }

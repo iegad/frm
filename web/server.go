@@ -15,18 +15,22 @@ type Server struct {
 	stMtx    sync.Mutex
 }
 
-func NewServer(host string, release ...bool) (*Server, error) {
+// 创建web服务
+func NewServer(host string, release, allowCors bool) (*Server, error) {
 	addr, err := net.ResolveTCPAddr("tcp", host)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(release) > 0 && release[0] {
+	if release {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.Default()
-	router.Use(cors.Default())
+
+	if allowCors {
+		router.Use(cors.Default())
+	}
 
 	return &Server{
 		host:   addr,
