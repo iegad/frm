@@ -33,7 +33,7 @@ type IOSConfig struct {
 }
 
 func (this_ *IOSConfig) String() string {
-	return utils.JSON(this_)
+	return utils.ToJson(this_)
 }
 
 // IO服务

@@ -14,9 +14,24 @@ func Bytes2Str(b []byte) *string {
 	return (*string)(unsafe.Pointer(&b))
 }
 
-func JSON(v interface{}) string {
-	jstr, _ := json.Marshal(v)
+func ToJson(msg any) string {
+	jstr, _ := json.Marshal(msg)
 	return string(jstr)
+}
+
+func ToJsonData(v any) []byte {
+	jstr, _ := json.Marshal(v)
+	return jstr
+}
+
+func FromJson[T any](data []byte) (*T, error) {
+	msg := new(T)
+	err := json.Unmarshal(data, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return msg, nil
 }
 
 func GetFileSuffix(fname string) string {
