@@ -1,7 +1,5 @@
 package utils
 
-import "github.com/gox/frm/log"
-
 type WorkerHandler[T any] func(item *T)
 
 type Worker[T any] struct {
@@ -21,12 +19,6 @@ func NewWorker[T any](proc WorkerHandler[T]) *Worker[T] {
 }
 
 func (this_ *Worker[T]) Push(item *T) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Error(err)
-		}
-	}()
-
 	this_.q <- item
 }
 

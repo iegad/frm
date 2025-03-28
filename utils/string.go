@@ -27,3 +27,11 @@ func GetFileSuffix(fname string) string {
 
 	return strings.ToLower(fname[idx+1:])
 }
+
+func StartWith(raw, start string) bool {
+	return strings.HasPrefix(raw, start)
+}
+
+func EndWith(raw, end string) bool {
+	return strings.HasSuffix(raw, end)
+}

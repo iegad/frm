@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-	"github.com/gox/frm/log"
 )
 
-func HttpPostJson(url string, params []byte) ([]byte, error) {
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(params))
+func HttpPostJson(url string, jsonData []byte) ([]byte, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Error(err)
 		return nil, err
 	}
 
