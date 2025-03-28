@@ -24,11 +24,11 @@ var upgrader = websocket.Upgrader{
 
 // IO服务配置
 type IOSConfig struct {
-	IP      string `yaml:"ip" json:"ip,omitempty"`                 // 服务监听地址
-	TcpPort uint16 `yaml:"tcp_port" json:"tcp_port,omitempty"`     // TCP 监听端口
-	WsPort  uint16 `yaml:"ws_port" json:"ws_port,omitempty"`       // websocket 监听端口
-	Blend   uint32 `yaml:"blend" json:"blend,omitempty"`           // 消息头混合值
-	MaxConn uint32 `yaml:"max_conn" json:"max_conn,omitempty"`     // 最大连接数, 最大连接数不能超过 int32的最大值, 否则无效
+	IP      string `yaml:"ip"         json:"ip,omitempty"`         // 服务监听地址
+	TcpPort uint16 `yaml:"tcp_port"   json:"tcp_port,omitempty"`   // TCP 监听端口
+	WsPort  uint16 `yaml:"ws_port"    json:"ws_port,omitempty"`    // websocket 监听端口
+	Blend   uint32 `yaml:"blend"      json:"blend,omitempty"`      // 消息头混合值
+	MaxConn uint32 `yaml:"max_conn"   json:"max_conn,omitempty"`   // 最大连接数, 最大连接数不能超过 int32的最大值, 否则无效
 	Timeout uint32 `yaml:"timeout(s)" json:"timeout(s),omitempty"` // 客户端超时值
 }
 

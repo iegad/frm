@@ -42,4 +42,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/gox/pb v0.0.1 => ../proto/go/pb
