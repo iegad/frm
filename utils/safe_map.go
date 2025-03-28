@@ -28,10 +28,18 @@ func (this_ *safeMap[K, V]) Remove(key K) {
 	this_.mtx.Unlock()
 }
 
+func (this_ *safeMap[K, V]) Has(key K) bool {
+	this_.mtx.Lock()
+	_, ok := this_.m[key]
+	this_.mtx.Unlock()
+	return ok
+}
+
 func (this_ *safeMap[K, V]) Get(key K) V {
 	this_.mtx.Lock()
-	defer this_.mtx.Unlock()
-	return this_.m[key]
+	res := this_.m[key]
+	this_.mtx.Unlock()
+	return res
 }
 
 func (this_ *safeMap[K, V]) Clear() {
