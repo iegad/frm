@@ -55,10 +55,10 @@ type ISess interface {
 	Read() ([]byte, error)
 
 	// 获取用户自定义数据
-	GetUserData() interface{}
+	GetUserData() any
 
 	// 设置用户自定义数据
-	SetUserData(userData interface{})
+	SetUserData(userData any)
 
 	// 获取接收序号
 	//	- 接收序号会在每次成功接收数据后 +1
