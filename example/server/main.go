@@ -14,7 +14,7 @@ func (this_ *EchoService) OnConnected(sess nw.ISess) error {
 	return nil
 }
 
-func (this_ *EchoService) OnDisconnected(sess nw.ISess) {
+func (this_ *EchoService) OnDisconnect(sess nw.ISess) {
 	log.Info("[%d]%v has disconnected", sess.SockFd(), sess.RemoteAddr().String())
 }
 

@@ -49,7 +49,9 @@ type IOServer struct {
 	timeout      time.Duration    // 客户端超时
 	service      IService         // 服务实例
 	mtx          sync.Mutex       // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
+	sessmap      sync.Map         // 会话集
 	wg           sync.WaitGroup   // 协程同步组
+	running      bool
 }
 
 // 创建io server 实例
@@ -135,12 +137,13 @@ func (this_ *IOServer) WsAddr() *net.TCPAddr {
 // 停止IO 服务
 func (this_ *IOServer) Stop() {
 	this_.mtx.Lock()
+	defer this_.mtx.Unlock()
+
+	if !this_.running {
+		return
+	}
 
 	var err error
-
-	if this_.tcpListener != nil || this_.wsListener != nil {
-		this_.service.OnStop(this_)
-	}
 
 	if this_.tcpListener != nil {
 		err = this_.tcpListener.Close()
@@ -160,7 +163,14 @@ func (this_ *IOServer) Stop() {
 
 	// 服务会等待所有协程释放之后再返回
 	this_.wg.Wait()
-	this_.mtx.Unlock()
+
+	this_.sessmap.Range(func(key, value any) bool {
+		value.(ISess).Close()
+		return true
+	})
+
+	this_.running = false
+	this_.service.OnStop(this_)
 }
 
 // 启动服务(阻塞)
@@ -176,10 +186,14 @@ func (this_ *IOServer) Run() error {
 
 // 启动服务
 func (this_ *IOServer) run() error {
-	this_.Stop()
-
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
+
+	if this_.running {
+		return nil
+	}
+
+	this_.running = true
 
 	var err error
 
@@ -264,9 +278,11 @@ func (this_ *IOServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	var rbuf []byte
 
 	defer func() {
-		this_.service.OnDisconnected(sess)
+		this_.service.OnDisconnect(sess)
+		this_.sessmap.Delete(sess.RemoteAddr().String())
 		atomic.AddInt32(&this_.connCount, -1)
 		sess.Close()
+
 		wg.Done()
 	}()
 
@@ -275,6 +291,7 @@ func (this_ *IOServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		log.Error(err)
 		return
 	}
+	this_.sessmap.Store(sess.RemoteAddr().String(), sess)
 
 	for {
 		rbuf, err = sess.Read()
@@ -336,7 +353,8 @@ func (this_ *IOServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 	var rbuf []byte
 
 	defer func() {
-		this_.service.OnDisconnected(sess)
+		this_.sessmap.Delete(sess.RemoteAddr().String())
+		this_.service.OnDisconnect(sess)
 		atomic.AddInt32(&this_.connCount, -1)
 		sess.Close()
 		wg.Done()
@@ -347,6 +365,7 @@ func (this_ *IOServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 		log.Error(err)
 		return
 	}
+	this_.sessmap.Store(sess.RemoteAddr().String(), sess)
 
 	for {
 		rbuf, err = sess.Read()

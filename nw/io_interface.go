@@ -15,7 +15,7 @@ type IService interface {
 	// 会话连接断开事件
 	//  - 当会话关闭时触发
 	//  - 在该事件句柄框架会自动调用 sess.Close, 所以无需在该句柄中手动关闭会话
-	OnDisconnected(sess ISess)
+	OnDisconnect(sess ISess)
 
 	// 接收数据事件
 	//  - 当 read 到有效数据时触发
