@@ -161,13 +161,14 @@ func (this_ *IoServer) Stop() {
 		this_.wsListener = nil
 	}
 
-	// 服务会等待所有协程释放之后再返回
-	this_.wg.Wait()
-
+	// 清理所有会话
 	this_.sessmap.Range(func(key, value any) bool {
 		value.(ISess).Close()
 		return true
 	})
+
+	// 服务会等待所有协程释放之后再返回
+	this_.wg.Wait()
 
 	this_.running = false
 	this_.service.OnStop(this_)
