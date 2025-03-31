@@ -38,7 +38,7 @@ func (this_ *IOSConfig) String() string {
 
 // IO服务
 //   - 可同时监听 TCP 和 Websocket 两种协议, 但需要不同的两个端口
-type IOServer struct {
+type IoServer struct {
 	maxConn      int32            // 最大连接数
 	connCount    int32            // 当前连接数
 	tcpHeadBlend uint32           // TCP 消息头混合值
@@ -55,7 +55,7 @@ type IOServer struct {
 }
 
 // 创建io server 实例
-func NewIOServer(cfg *IOSConfig, service IService) (*IOServer, error) {
+func NewIOServer(cfg *IOSConfig, service IService) (*IoServer, error) {
 	if cfg == nil {
 		return nil, ErrConfigNil
 	}
@@ -95,7 +95,7 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IOServer, error) {
 		maxConn = math.MaxInt32
 	}
 
-	this_ := &IOServer{
+	this_ := &IoServer{
 		tcpAddr:      tcpAddr,
 		wsAddr:       wsAddr,
 		tcpHeadBlend: cfg.Blend,
@@ -117,7 +117,7 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IOServer, error) {
 }
 
 // 获取 TCP 监听地址
-func (this_ *IOServer) TcpAddr() *net.TCPAddr {
+func (this_ *IoServer) TcpAddr() *net.TCPAddr {
 	if this_.tcpAddr != nil {
 		return this_.tcpAddr
 	}
@@ -126,7 +126,7 @@ func (this_ *IOServer) TcpAddr() *net.TCPAddr {
 }
 
 // 获取 websocket 监听地址
-func (this_ *IOServer) WsAddr() *net.TCPAddr {
+func (this_ *IoServer) WsAddr() *net.TCPAddr {
 	if this_.wsAddr != nil {
 		return this_.wsAddr
 	}
@@ -135,7 +135,7 @@ func (this_ *IOServer) WsAddr() *net.TCPAddr {
 }
 
 // 停止IO 服务
-func (this_ *IOServer) Stop() {
+func (this_ *IoServer) Stop() {
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
 
@@ -174,7 +174,7 @@ func (this_ *IOServer) Stop() {
 }
 
 // 启动服务(阻塞)
-func (this_ *IOServer) Run() error {
+func (this_ *IoServer) Run() error {
 	err := this_.run()
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (this_ *IOServer) Run() error {
 }
 
 // 启动服务
-func (this_ *IOServer) run() error {
+func (this_ *IoServer) run() error {
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
 
@@ -240,7 +240,7 @@ func (this_ *IOServer) run() error {
 }
 
 // 启动 tcp 监听服务
-func (this_ *IOServer) tcpRun(wg *sync.WaitGroup) {
+func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	maxConn := this_.maxConn
@@ -266,7 +266,7 @@ func (this_ *IOServer) tcpRun(wg *sync.WaitGroup) {
 }
 
 // tcp conn 句柄
-func (this_ *IOServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
+func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	sess, err := newTcpSess(conn, this_.timeout, this_.tcpHeadBlend)
 	if err != nil {
 		log.Error(err)
@@ -307,7 +307,7 @@ func (this_ *IOServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 }
 
 // 启动 websocket 监听
-func (this_ *IOServer) wsRun(wg *sync.WaitGroup) {
+func (this_ *IoServer) wsRun(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	err := http.Serve(this_.wsListener, nil)
@@ -317,7 +317,7 @@ func (this_ *IOServer) wsRun(wg *sync.WaitGroup) {
 }
 
 // http 转换 websocket
-func (this_ *IOServer) wsHandler(w http.ResponseWriter, r *http.Request) {
+func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	if this_.maxConn > 0 && atomic.LoadInt32(&this_.connCount) >= this_.maxConn {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -347,7 +347,7 @@ func (this_ *IOServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // websocket conn 句柄
-func (this_ *IOServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
+func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 
 	atomic.AddInt32(&this_.connCount, 1)
 	var rbuf []byte

@@ -29,12 +29,12 @@ func (this_ *EchoService) OnData(sess nw.ISess, data []byte) bool {
 	return true
 }
 
-func (this_ *EchoService) OnStart(ios *nw.IOServer) error {
+func (this_ *EchoService) OnStart(ios *nw.IoServer) error {
 	log.Info("running ...: %v, %v", ios.TcpAddr(), ios.WsAddr())
 	return nil
 }
 
-func (this_ *EchoService) OnStop(ios *nw.IOServer) {
+func (this_ *EchoService) OnStop(ios *nw.IoServer) {
 	log.Info("stop !!!")
 }
 

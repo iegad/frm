@@ -25,11 +25,11 @@ type IService interface {
 	// 服务启动事件
 	//  - 在创建监听对象后, 监听(Accept)之前触发
 	//  - 当该接口返回 err 时, 服务将关闭
-	OnStart(ios *IOServer) error
+	OnStart(ios *IoServer) error
 
 	// 服务停止事件
 	//  - 在服务收到停止请求后, 停止服务前触发
-	OnStop(ios *IOServer)
+	OnStop(ios *IoServer)
 }
 
 // ISess 引擎接口
