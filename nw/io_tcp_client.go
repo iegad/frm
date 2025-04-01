@@ -90,7 +90,7 @@ func (this_ *TcpClient) Close() error {
 	return this_.conn.Close()
 }
 
-func (this_ *TcpClient) RemoteIP() string {
+func (this_ *TcpClient) RealRemoteIP() string {
 	return this_.realIP
 }
 

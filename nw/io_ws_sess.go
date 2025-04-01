@@ -62,7 +62,7 @@ func (this_ *wsSess) RemoteAddr() net.Addr {
 	return this_.conn.RemoteAddr()
 }
 
-func (this_ *wsSess) RemoteIP() string {
+func (this_ *wsSess) RealRemoteIP() string {
 	return this_.realIP
 }
 

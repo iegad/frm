@@ -70,7 +70,7 @@ func (this_ *tcpSess) RemoteAddr() net.Addr {
 	return this_.conn.RemoteAddr()
 }
 
-func (this_ *tcpSess) RemoteIP() string {
+func (this_ *tcpSess) RealRemoteIP() string {
 	return this_.realIP
 }
 
