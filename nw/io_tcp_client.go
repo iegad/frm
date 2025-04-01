@@ -86,12 +86,12 @@ func (this_ *TcpClient) RemoteAddr() net.Addr {
 	return this_.conn.RemoteAddr()
 }
 
-func (this_ *TcpClient) Close() error {
-	return this_.conn.Close()
-}
-
 func (this_ *TcpClient) RealRemoteIP() string {
 	return this_.realIP
+}
+
+func (this_ *TcpClient) Close() error {
+	return this_.conn.Close()
 }
 
 func (this_ *TcpClient) Write(data []byte) (int, error) {

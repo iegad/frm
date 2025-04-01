@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -18,6 +19,7 @@ type WsClient struct {
 	timeout  time.Duration
 	conn     *websocket.Conn
 	userData interface{}
+	realIP   string
 }
 
 func NewWsClient(addr string, timeout time.Duration) (*WsClient, error) {
@@ -40,6 +42,8 @@ func NewWsClient(addr string, timeout time.Duration) (*WsClient, error) {
 
 	fd := <-ch
 
+	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
+
 	return &WsClient{
 		fd:       fd,
 		recvSeq:  0,
@@ -47,6 +51,7 @@ func NewWsClient(addr string, timeout time.Duration) (*WsClient, error) {
 		timeout:  timeout,
 		conn:     conn,
 		userData: nil,
+		realIP:   realIP,
 	}, nil
 }
 
@@ -61,6 +66,10 @@ func (this_ *WsClient) LocalAddr() net.Addr {
 
 func (this_ *WsClient) RemoteAddr() net.Addr {
 	return this_.conn.RemoteAddr()
+}
+
+func (this_ *WsClient) RealRemoteIP() string {
+	return this_.realIP
 }
 
 func (this_ *WsClient) Close() error {

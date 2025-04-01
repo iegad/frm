@@ -43,6 +43,7 @@ type ISess interface {
 	// 远端地址
 	RemoteAddr() net.Addr
 
+	// 获取真实IP
 	RealRemoteIP() string
 
 	// 关闭会话

@@ -39,18 +39,18 @@ func (this_ *IOSConfig) String() string {
 // IO服务
 //   - 可同时监听 TCP 和 Websocket 两种协议, 但需要不同的两个端口
 type IoServer struct {
-	maxConn      int32                        // 最大连接数
-	connCount    int32                        // 当前连接数
-	tcpHeadBlend uint32                       // TCP 消息头混合值
-	tcpAddr      *net.TCPAddr                 // TCP 监听 Endpoint
-	tcpListener  *net.TCPListener             // tcp listener
-	wsAddr       *net.TCPAddr                 // websocket 监听 Endpoint
-	wsListener   *net.TCPListener             // websocket listener
-	timeout      time.Duration                // 客户端超时
-	service      IService                     // 服务实例
-	mtx          sync.Mutex                   // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
-	sessmap      utils.SafeMap[string, ISess] // 会话集
-	wg           sync.WaitGroup               // 协程同步组
+	maxConn      int32                         // 最大连接数
+	connCount    int32                         // 当前连接数
+	tcpHeadBlend uint32                        // TCP 消息头混合值
+	tcpAddr      *net.TCPAddr                  // TCP 监听 Endpoint
+	tcpListener  *net.TCPListener              // tcp listener
+	wsAddr       *net.TCPAddr                  // websocket 监听 Endpoint
+	wsListener   *net.TCPListener              // websocket listener
+	timeout      time.Duration                 // 客户端超时
+	service      IService                      // 服务实例
+	mtx          sync.Mutex                    // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
+	sessmap      *utils.SafeMap[string, ISess] // 会话集
+	wg           sync.WaitGroup                // 协程同步组
 	running      bool
 }
 
@@ -107,6 +107,7 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IoServer, error) {
 		service:      service,
 		mtx:          sync.Mutex{},
 		wg:           sync.WaitGroup{},
+		sessmap:      utils.NewSafeMap[string, ISess](),
 	}
 
 	if this_.wsAddr != nil {
@@ -325,15 +326,19 @@ func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
 	realIp := r.Header.Get("X-Forwarded-For")
 	if strings.Contains(realIp, "127.0.0.1") || len(realIp) == 0 {
 		realIp = r.Header.Get("X-real-ip")
 	}
 
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Error(err)
-		return
+	if len(realIp) == 0 {
+		realIp = r.RemoteAddr
 	}
 
 	this_.wg.Add(1)
@@ -350,7 +355,6 @@ func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 // websocket conn 句柄
 func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
-
 	atomic.AddInt32(&this_.connCount, 1)
 	var rbuf []byte
 
@@ -367,6 +371,7 @@ func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 		log.Error(err)
 		return
 	}
+
 	this_.sessmap.Set(sess.RemoteAddr().String(), sess)
 
 	for {

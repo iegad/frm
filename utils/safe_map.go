@@ -11,7 +11,7 @@ type SafeMap[K comparable, V any] struct {
 
 func NewSafeMap[K comparable, V any]() *SafeMap[K, V] {
 	return &SafeMap[K, V]{
-		m: make(map[K]V),
+		m: map[K]V{},
 	}
 }
 
@@ -57,4 +57,12 @@ func (this_ *SafeMap[K, V]) Range(handler func(key K, v V) bool) {
 		}
 		this_.mtx.RUnlock()
 	}
+}
+
+func (this_ *SafeMap[K, V]) Count() int {
+	count := 0
+	this_.mtx.RLock()
+	count = len(this_.m)
+	this_.mtx.RUnlock()
+	return count
 }
