@@ -292,6 +292,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		log.Error(err)
 		return
 	}
+
 	this_.sessmap.Set(sess.RemoteAddr().String(), sess)
 
 	for {
