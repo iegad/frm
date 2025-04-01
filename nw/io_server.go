@@ -39,18 +39,18 @@ func (this_ *IOSConfig) String() string {
 // IO服务
 //   - 可同时监听 TCP 和 Websocket 两种协议, 但需要不同的两个端口
 type IoServer struct {
-	maxConn      int32            // 最大连接数
-	connCount    int32            // 当前连接数
-	tcpHeadBlend uint32           // TCP 消息头混合值
-	tcpAddr      *net.TCPAddr     // TCP 监听 Endpoint
-	tcpListener  *net.TCPListener // tcp listener
-	wsAddr       *net.TCPAddr     // websocket 监听 Endpoint
-	wsListener   *net.TCPListener // websocket listener
-	timeout      time.Duration    // 客户端超时
-	service      IService         // 服务实例
-	mtx          sync.Mutex       // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
-	sessmap      sync.Map         // 会话集
-	wg           sync.WaitGroup   // 协程同步组
+	maxConn      int32                        // 最大连接数
+	connCount    int32                        // 当前连接数
+	tcpHeadBlend uint32                       // TCP 消息头混合值
+	tcpAddr      *net.TCPAddr                 // TCP 监听 Endpoint
+	tcpListener  *net.TCPListener             // tcp listener
+	wsAddr       *net.TCPAddr                 // websocket 监听 Endpoint
+	wsListener   *net.TCPListener             // websocket listener
+	timeout      time.Duration                // 客户端超时
+	service      IService                     // 服务实例
+	mtx          sync.Mutex                   // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
+	sessmap      utils.SafeMap[string, ISess] // 会话集
+	wg           sync.WaitGroup               // 协程同步组
 	running      bool
 }
 
@@ -162,8 +162,8 @@ func (this_ *IoServer) Stop() {
 	}
 
 	// 清理所有会话
-	this_.sessmap.Range(func(key, value any) bool {
-		value.(ISess).Close()
+	this_.sessmap.Range(func(remoteAddr string, value ISess) bool {
+		value.Close()
 		return true
 	})
 
@@ -280,7 +280,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 
 	defer func() {
 		this_.service.OnDisconnect(sess)
-		this_.sessmap.Delete(sess.RemoteAddr().String())
+		this_.sessmap.Remove(sess.RemoteAddr().String())
 		atomic.AddInt32(&this_.connCount, -1)
 		sess.Close()
 
@@ -292,7 +292,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		log.Error(err)
 		return
 	}
-	this_.sessmap.Store(sess.RemoteAddr().String(), sess)
+	this_.sessmap.Set(sess.RemoteAddr().String(), sess)
 
 	for {
 		rbuf, err = sess.Read()
@@ -354,7 +354,7 @@ func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 	var rbuf []byte
 
 	defer func() {
-		this_.sessmap.Delete(sess.RemoteAddr().String())
+		this_.sessmap.Remove(sess.RemoteAddr().String())
 		this_.service.OnDisconnect(sess)
 		atomic.AddInt32(&this_.connCount, -1)
 		sess.Close()
@@ -366,7 +366,7 @@ func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 		log.Error(err)
 		return
 	}
-	this_.sessmap.Store(sess.RemoteAddr().String(), sess)
+	this_.sessmap.Set(sess.RemoteAddr().String(), sess)
 
 	for {
 		rbuf, err = sess.Read()

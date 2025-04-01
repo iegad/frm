@@ -6,13 +6,12 @@ import (
 
 type SafeMap[K comparable, V any] struct {
 	m   map[K]V
-	mtx sync.Mutex
+	mtx sync.RWMutex
 }
 
 func NewSafeMap[K comparable, V any]() *SafeMap[K, V] {
 	return &SafeMap[K, V]{
-		m:   make(map[K]V),
-		mtx: sync.Mutex{},
+		m: make(map[K]V),
 	}
 }
 
@@ -29,16 +28,16 @@ func (this_ *SafeMap[K, V]) Remove(key K) {
 }
 
 func (this_ *SafeMap[K, V]) Has(key K) bool {
-	this_.mtx.Lock()
+	this_.mtx.RLock()
 	_, ok := this_.m[key]
-	this_.mtx.Unlock()
+	this_.mtx.RUnlock()
 	return ok
 }
 
 func (this_ *SafeMap[K, V]) Get(key K) V {
-	this_.mtx.Lock()
+	this_.mtx.RLock()
 	res := this_.m[key]
-	this_.mtx.Unlock()
+	this_.mtx.RUnlock()
 	return res
 }
 
@@ -49,16 +48,13 @@ func (this_ *SafeMap[K, V]) Clear() {
 }
 
 func (this_ *SafeMap[K, V]) Range(handler func(key K, v V) bool) {
-	if handler == nil {
-		return
-	}
-
-	this_.mtx.Lock()
-	defer this_.mtx.Unlock()
-
-	for k, v := range this_.m {
-		if !handler(k, v) {
-			break
+	if handler != nil {
+		this_.mtx.RLock()
+		for k, v := range this_.m {
+			if !handler(k, v) {
+				break
+			}
 		}
+		this_.mtx.RUnlock()
 	}
 }

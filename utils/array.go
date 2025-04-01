@@ -9,6 +9,7 @@ func IsValueInArray[T comparable](v *T, arr []T) bool {
 
 	return false
 }
+
 func CloneSlice[T any](src []T) []T {
 	dst := make([]T, len(src))
 	copy(dst, src)
