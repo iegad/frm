@@ -13,16 +13,20 @@ import (
 	"github.com/gox/frm/log"
 )
 
+// tcpSess
+//
+//	TCP会话
 type tcpSess struct {
-	blend    uint32
-	fd       int64
-	recvSeq  int64
-	sendSeq  int64
-	timeout  time.Duration
-	conn     *net.TCPConn
-	reader   *bufio.Reader
-	userData interface{}
-	realIP   string
+	connected bool          // 是否处理连接
+	blend     uint32        // 消息头混合值
+	fd        int64         // 文件描述符
+	recvSeq   int64         // 接收序列
+	sendSeq   int64         // 发送序列
+	timeout   time.Duration // 超时值
+	conn      *net.TCPConn  // 连接对象
+	reader    *bufio.Reader // 读缓冲区
+	realIP    string        // 真实IP
+	userData  any           // 用户数据
 }
 
 func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSess, error) {
@@ -46,16 +50,21 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
 
 	return &tcpSess{
-		blend:    blend,
-		fd:       fd,
-		recvSeq:  0,
-		sendSeq:  0,
-		timeout:  timeout,
-		conn:     conn,
-		reader:   bufio.NewReader(conn),
-		userData: nil,
-		realIP:   realIP,
+		connected: false,
+		blend:     blend,
+		fd:        fd,
+		recvSeq:   0,
+		sendSeq:   0,
+		timeout:   timeout,
+		conn:      conn,
+		reader:    bufio.NewReader(conn),
+		realIP:    realIP,
+		userData:  nil,
 	}, nil
+}
+
+func (this_ *tcpSess) IsConnected() bool {
+	return this_.connected
 }
 
 func (this_ *tcpSess) SockFd() int64 {
@@ -75,7 +84,11 @@ func (this_ *tcpSess) RealRemoteIP() string {
 }
 
 func (this_ *tcpSess) Close() error {
-	return this_.conn.Close()
+	err := this_.conn.Close()
+	if this_.connected {
+		this_.connected = false
+	}
+	return err
 }
 
 func (this_ *tcpSess) Write(data []byte) (int, error) {
@@ -90,10 +103,6 @@ func (this_ *tcpSess) Write(data []byte) (int, error) {
 
 func (this_ *tcpSess) Read() ([]byte, error) {
 	var err error
-
-	if this_.conn == nil {
-		log.Fatal("tcpSess.tcpConn is nil")
-	}
 
 	if this_.timeout > 0 {
 		err = this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
@@ -135,11 +144,11 @@ func (this_ *tcpSess) Read() ([]byte, error) {
 	return rbuf, nil
 }
 
-func (this_ *tcpSess) GetUserData() interface{} {
+func (this_ *tcpSess) GetUserData() any {
 	return this_.userData
 }
 
-func (this_ *tcpSess) SetUserData(userData interface{}) {
+func (this_ *tcpSess) SetUserData(userData any) {
 	this_.userData = userData
 }
 

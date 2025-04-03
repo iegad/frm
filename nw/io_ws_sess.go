@@ -11,13 +11,14 @@ import (
 )
 
 type wsSess struct {
-	fd       int64
-	recvSeq  int64
-	sendSeq  int64
-	conn     *websocket.Conn
-	timeout  time.Duration
-	realIP   string
-	userData interface{}
+	connected bool
+	fd        int64
+	recvSeq   int64
+	sendSeq   int64
+	timeout   time.Duration
+	conn      *websocket.Conn
+	realIP    string
+	userData  any
 }
 
 func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*wsSess, error) {
@@ -40,14 +41,19 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*
 	fd := <-ch
 
 	return &wsSess{
-		fd:       fd,
-		recvSeq:  0,
-		sendSeq:  0,
-		conn:     conn,
-		timeout:  timeout,
-		userData: nil,
-		realIP:   ip,
+		connected: false,
+		fd:        fd,
+		recvSeq:   0,
+		sendSeq:   0,
+		conn:      conn,
+		timeout:   timeout,
+		userData:  nil,
+		realIP:    ip,
 	}, nil
+}
+
+func (this_ *wsSess) IsConnected() bool {
+	return this_.connected
 }
 
 func (this_ *wsSess) SockFd() int64 {
@@ -67,7 +73,11 @@ func (this_ *wsSess) RealRemoteIP() string {
 }
 
 func (this_ *wsSess) Close() error {
-	return this_.conn.Close()
+	err := this_.conn.Close()
+	if this_.connected {
+		this_.connected = false
+	}
+	return err
 }
 
 func (this_ *wsSess) Write(data []byte) (int, error) {
@@ -108,11 +118,11 @@ func (this_ *wsSess) Read() ([]byte, error) {
 	return data, nil
 }
 
-func (this_ *wsSess) GetUserData() interface{} {
+func (this_ *wsSess) GetUserData() any {
 	return this_.userData
 }
 
-func (this_ *wsSess) SetUserData(userData interface{}) {
+func (this_ *wsSess) SetUserData(userData any) {
 	this_.userData = userData
 }
 

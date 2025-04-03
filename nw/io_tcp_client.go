@@ -15,6 +15,7 @@ import (
 
 // TcpClient TCP客户端
 type TcpClient struct {
+	connected    bool
 	tcpHeadBlend uint32
 	fd           int64
 	recvSeq      int64
@@ -22,8 +23,8 @@ type TcpClient struct {
 	timeout      time.Duration
 	conn         *net.TCPConn
 	reader       *bufio.Reader
-	userData     interface{}
 	realIP       string
+	userData     any
 }
 
 func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient, error) {
@@ -62,6 +63,7 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
 
 	return &TcpClient{
+		connected:    true,
 		tcpHeadBlend: blend,
 		fd:           fd,
 		recvSeq:      0,
@@ -69,9 +71,13 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 		timeout:      timeout,
 		conn:         conn.(*net.TCPConn),
 		reader:       bufio.NewReader(conn),
-		userData:     nil,
 		realIP:       realIP,
+		userData:     nil,
 	}, nil
+}
+
+func (this_ *TcpClient) IsConnected() bool {
+	return this_.connected
 }
 
 func (this_ *TcpClient) SockFd() int64 {
@@ -91,7 +97,11 @@ func (this_ *TcpClient) RealRemoteIP() string {
 }
 
 func (this_ *TcpClient) Close() error {
-	return this_.conn.Close()
+	err := this_.conn.Close()
+	if this_.connected {
+		this_.connected = false
+	}
+	return err
 }
 
 func (this_ *TcpClient) Write(data []byte) (int, error) {
@@ -149,11 +159,11 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	return rbuf, nil
 }
 
-func (this_ *TcpClient) GetUserData() interface{} {
+func (this_ *TcpClient) GetUserData() any {
 	return this_.userData
 }
 
-func (this_ *TcpClient) SetUserData(userData interface{}) {
+func (this_ *TcpClient) SetUserData(userData any) {
 	this_.userData = userData
 }
 

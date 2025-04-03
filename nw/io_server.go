@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -40,7 +39,6 @@ func (this_ *IOSConfig) String() string {
 //   - 可同时监听 TCP 和 Websocket 两种协议, 但需要不同的两个端口
 type IoServer struct {
 	maxConn      int32                         // 最大连接数
-	connCount    int32                         // 当前连接数
 	tcpHeadBlend uint32                        // TCP 消息头混合值
 	tcpAddr      *net.TCPAddr                  // TCP 监听 Endpoint
 	tcpListener  *net.TCPListener              // tcp listener
@@ -102,7 +100,6 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IoServer, error) {
 		tcpListener:  nil,
 		wsListener:   nil,
 		maxConn:      int32(maxConn),
-		connCount:    0,
 		timeout:      time.Duration(cfg.Timeout) * time.Second,
 		service:      service,
 		mtx:          sync.Mutex{},
@@ -257,7 +254,7 @@ func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 			continue
 		}
 
-		if maxConn > 0 && atomic.LoadInt32(&this_.connCount) >= maxConn {
+		if maxConn > 0 && int32(this_.sessmap.Count()) >= maxConn {
 			conn.Close()
 			continue
 		}
@@ -276,18 +273,16 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		return
 	}
 
-	atomic.AddInt32(&this_.connCount, 1)
 	var rbuf []byte
 
 	defer func() {
 		this_.service.OnDisconnect(sess)
 		this_.sessmap.Remove(sess.RemoteAddr().String())
-		atomic.AddInt32(&this_.connCount, -1)
 		sess.Close()
-
 		wg.Done()
 	}()
 
+	sess.connected = true
 	err = this_.service.OnConnected(sess)
 	if err != nil {
 		log.Error(err)
@@ -299,6 +294,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	for {
 		rbuf, err = sess.Read()
 		if err != nil {
+			log.Error("tcpSess.Read failed: %v", err)
 			break
 		}
 
@@ -321,7 +317,7 @@ func (this_ *IoServer) wsRun(wg *sync.WaitGroup) {
 
 // http 转换 websocket
 func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
-	if this_.maxConn > 0 && atomic.LoadInt32(&this_.connCount) >= this_.maxConn {
+	if this_.maxConn > 0 && int32(this_.sessmap.Count()) >= this_.maxConn {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -355,13 +351,11 @@ func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 // websocket conn 句柄
 func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
-	atomic.AddInt32(&this_.connCount, 1)
 	var rbuf []byte
 
 	defer func() {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		this_.service.OnDisconnect(sess)
-		atomic.AddInt32(&this_.connCount, -1)
 		sess.Close()
 		wg.Done()
 	}()

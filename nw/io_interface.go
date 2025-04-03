@@ -35,6 +35,8 @@ type IService interface {
 // ISess 引擎接口
 //   - 服务端会话接口
 type ISess interface {
+	IsConnected() bool
+
 	SockFd() int64
 
 	// 本端地址
