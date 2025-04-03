@@ -19,7 +19,7 @@ func (this_ *EchoService) OnDisconnect(sess nw.ISess) {
 }
 
 func (this_ *EchoService) OnData(sess nw.ISess, data []byte) bool {
-	log.Info("recvSeq: %v, %v", sess.GetRecvSeq(), utils.Bytes2Str(data))
+	log.Info("recvSeq: %v, %v", sess.GetRecvSeq(), *utils.Bytes2Str(data))
 	_, err := sess.Write(data)
 	if err != nil {
 		log.Error(err)
