@@ -6,6 +6,9 @@ import (
 	"unsafe"
 )
 
+// Str2Bytes 零拷贝转换
+//
+//	但是在计算MD5的时候不应使用该函数
 func Str2Bytes(s string) *[]byte {
 	return (*[]byte)(unsafe.Pointer(&s))
 }
