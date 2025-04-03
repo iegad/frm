@@ -2,7 +2,6 @@ package web
 
 import (
 	"net"
-	"sync"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -12,7 +11,6 @@ type Server struct {
 	listener *net.TCPListener
 	host     *net.TCPAddr
 	router   *gin.Engine
-	stMtx    sync.Mutex
 }
 
 // 创建web服务
@@ -54,11 +52,5 @@ func (this_ *Server) Run() error {
 }
 
 func (this_ *Server) Close() {
-	this_.stMtx.Lock()
-	defer this_.stMtx.Unlock()
-
-	if this_.listener != nil {
-		this_.listener.Close()
-		this_.listener = nil
-	}
+	this_.listener.Close()
 }
