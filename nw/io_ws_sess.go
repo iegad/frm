@@ -101,7 +101,7 @@ func (this_ *wsSess) Read() ([]byte, error) {
 
 	t, data, err := this_.conn.ReadMessage()
 	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, net.ErrClosed) {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
 			log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
 		} else {
 			log.Error("read from conn[%v] failed: %v then will PASSIVE close", this_.conn.RemoteAddr(), err)
