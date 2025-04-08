@@ -3,11 +3,8 @@ package nw
 import (
 	"bufio"
 	"encoding/binary"
-	"errors"
 	"io"
 	"net"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -47,8 +44,6 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 
 	fd := <-ch
 
-	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
-
 	return &tcpSess{
 		connected: false,
 		blend:     blend,
@@ -58,7 +53,7 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 		timeout:   timeout,
 		conn:      conn,
 		reader:    bufio.NewReader(conn),
-		realIP:    realIP,
+		realIP:    conn.RemoteAddr().(*net.TCPAddr).IP.String(),
 		userData:  nil,
 	}, nil
 }
@@ -107,7 +102,6 @@ func (this_ *tcpSess) Read() ([]byte, error) {
 	if this_.timeout > 0 {
 		err = this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
-			log.Error("set conn[%v] read timeout failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
 			return nil, err
 		}
 	}
@@ -115,28 +109,17 @@ func (this_ *tcpSess) Read() ([]byte, error) {
 	hbuf := make([]byte, UINT32_SIZE)
 	_, err = io.ReadAtLeast(this_.reader, hbuf, UINT32_SIZE)
 	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
-		} else {
-			log.Error("read from conn[%v] failed: %v then will PASSIVE close", this_.conn.RemoteAddr(), err)
-		}
 		return nil, err
 	}
 
 	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.blend
 	if buflen == 0 || buflen > MAX_BUF_SIZE {
-		log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), ErrInvalidBufSize)
 		return nil, ErrInvalidBufSize
 	}
 
 	rbuf := make([]byte, buflen)
 	_, err = io.ReadAtLeast(this_.reader, rbuf, int(buflen))
 	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
-		} else {
-			log.Error("read from conn[%v] failed: %v then will PASSIVE close", this_.conn.RemoteAddr(), err)
-		}
 		return nil, err
 	}
 

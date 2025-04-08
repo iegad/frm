@@ -3,11 +3,8 @@ package nw
 import (
 	"bufio"
 	"encoding/binary"
-	"errors"
 	"io"
 	"net"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -60,8 +57,6 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 
 	fd := <-ch
 
-	realIP := strings.Split(conn.RemoteAddr().String(), ":")[0]
-
 	return &TcpClient{
 		connected:    true,
 		tcpHeadBlend: blend,
@@ -71,7 +66,7 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 		timeout:      timeout,
 		conn:         conn.(*net.TCPConn),
 		reader:       bufio.NewReader(conn),
-		realIP:       realIP,
+		realIP:       conn.RemoteAddr().(*net.TCPAddr).IP.String(),
 		userData:     nil,
 	}, nil
 }
@@ -115,14 +110,9 @@ func (this_ *TcpClient) Write(data []byte) (int, error) {
 }
 
 func (this_ *TcpClient) Read() ([]byte, error) {
-	if this_.conn == nil {
-		log.Fatal("Client.tcpConn is nil")
-	}
-
 	if this_.timeout > 0 {
 		err := this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
-			log.Error("set conn[%v] read timeout failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
 			return nil, err
 		}
 	}
@@ -130,28 +120,17 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	hbuf := make([]byte, UINT32_SIZE)
 	_, err := io.ReadAtLeast(this_.reader, hbuf, UINT32_SIZE)
 	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
-		} else {
-			log.Error("read from conn[%v] failed: %v then will PASSIVE close", this_.conn.RemoteAddr(), err)
-		}
 		return nil, err
 	}
 
 	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.tcpHeadBlend
 	if buflen == 0 || buflen > MAX_BUF_SIZE {
-		log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), ErrInvalidBufSize)
 		return nil, ErrInvalidBufSize
 	}
 
 	rbuf := make([]byte, buflen)
 	_, err = io.ReadAtLeast(this_.reader, rbuf, int(buflen))
 	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
-		} else {
-			log.Error("read from conn[%v] failed: %v then will PASSIVE close", this_.conn.RemoteAddr(), err)
-		}
 		return nil, err
 	}
 

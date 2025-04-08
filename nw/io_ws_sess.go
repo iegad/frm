@@ -1,9 +1,7 @@
 package nw
 
 import (
-	"errors"
 	"net"
-	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -73,10 +71,16 @@ func (this_ *wsSess) RealRemoteIP() string {
 }
 
 func (this_ *wsSess) Close() error {
-	err := this_.conn.Close()
+	err := this_.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
+	if err != nil {
+		log.Error("WsSess[%v] write control close message failed: %v", this_.realIP, err)
+	}
+
+	err = this_.conn.Close()
 	if this_.connected {
 		this_.connected = false
 	}
+
 	return err
 }
 
@@ -94,23 +98,16 @@ func (this_ *wsSess) Read() ([]byte, error) {
 	if this_.timeout > 0 {
 		err := this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
-			log.Error("set conn[%v] read timeout failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
 			return nil, err
 		}
 	}
 
 	t, data, err := this_.conn.ReadMessage()
 	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), err)
-		} else {
-			log.Error("read from conn[%v] failed: %v then will PASSIVE close", this_.conn.RemoteAddr(), err)
-		}
 		return nil, err
 	}
 
 	if t != websocket.BinaryMessage {
-		log.Error("read from conn[%v] failed: %v then will ACITVE close", this_.conn.RemoteAddr(), ErrWsMsgTypeInvalid)
 		return nil, ErrWsMsgTypeInvalid
 	}
 

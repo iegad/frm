@@ -1,13 +1,15 @@
 package nw
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -108,7 +110,7 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IoServer, error) {
 	}
 
 	if this_.wsAddr != nil {
-		http.HandleFunc("/ws", this_.wsHandler)
+		http.HandleFunc("/ws", this_.wsUpgrade)
 	}
 
 	return this_, nil
@@ -255,6 +257,7 @@ func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 		}
 
 		if maxConn > 0 && int32(this_.sessmap.Count()) >= maxConn {
+			log.Error("TcpSess[%v] ACTIVE close. Error: Connection limit reached", conn.RemoteAddr())
 			conn.Close()
 			continue
 		}
@@ -294,12 +297,15 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	for {
 		rbuf, err = sess.Read()
 		if err != nil {
-			log.Error("tcpSess.Read failed: %v", err)
+			if errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+				log.Debug("TcpSess[%v] PASSIVE close", sess.RemoteAddr())
+			} else {
+				log.Error("TcpSess[%v] ACTIVE close. Error: %v", sess.RemoteAddr(), err)
+			}
 			break
 		}
 
 		if !this_.service.OnData(sess, rbuf) {
-			log.Error("set conn[%v] processe data failed then will ACITVE close", conn.RemoteAddr())
 			break
 		}
 	}
@@ -316,7 +322,7 @@ func (this_ *IoServer) wsRun(wg *sync.WaitGroup) {
 }
 
 // http 转换 websocket
-func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
+func (this_ *IoServer) wsUpgrade(w http.ResponseWriter, r *http.Request) {
 	if this_.maxConn > 0 && int32(this_.sessmap.Count()) >= this_.maxConn {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -328,18 +334,9 @@ func (this_ *IoServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	realIp := r.Header.Get("X-Forwarded-For")
-	if strings.Contains(realIp, "127.0.0.1") || len(realIp) == 0 {
-		realIp = r.Header.Get("X-real-ip")
-	}
-
-	if len(realIp) == 0 {
-		realIp = r.RemoteAddr
-	}
-
 	this_.wg.Add(1)
 
-	sess, err := newWsSess(conn, this_.timeout, realIp)
+	sess, err := newWsSess(conn, this_.timeout, GetHttpRequestRealIP(r))
 	if err != nil {
 		log.Error(err)
 		conn.Close()
@@ -371,11 +368,19 @@ func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 	for {
 		rbuf, err = sess.Read()
 		if err != nil {
+			if errors.Is(err, syscall.ECONNRESET) || websocket.IsCloseError(err,
+				websocket.CloseNormalClosure,
+				websocket.CloseAbnormalClosure,
+				websocket.CloseGoingAway,
+				websocket.CloseNoStatusReceived) {
+				log.Debug("WsSess[%v] PASSIVE close", sess.RemoteAddr())
+			} else {
+				log.Error("WsSess[%v] ACTIVE close. Error: %v", sess.RemoteAddr(), err)
+			}
 			break
 		}
 
 		if !this_.service.OnData(sess, rbuf) {
-			log.Error("process conn[%v] data failed then will ACTIVE close", sess.RemoteAddr())
 			break
 		}
 	}
