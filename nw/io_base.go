@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
-
-	"github.com/gox/frm/log"
 )
 
 const (
@@ -45,10 +43,6 @@ func GetHttpRequestRealIP(r *http.Request) string {
 }
 
 func write(conn net.Conn, data []byte, timeout time.Duration, blend uint32) (int, error) {
-	if conn == nil {
-		log.Fatal("conn is nil")
-	}
-
 	if timeout > 0 {
 		err := conn.SetWriteDeadline(time.Now().Add(timeout))
 		if err != nil {
