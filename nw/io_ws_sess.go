@@ -2,6 +2,7 @@ package nw
 
 import (
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -9,7 +10,7 @@ import (
 )
 
 type wsSess struct {
-	connected bool
+	connected int32
 	fd        int64
 	recvSeq   int64
 	sendSeq   int64
@@ -39,7 +40,7 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*
 	fd := <-ch
 
 	return &wsSess{
-		connected: false,
+		connected: 1,
 		fd:        fd,
 		recvSeq:   0,
 		sendSeq:   0,
@@ -51,7 +52,7 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*
 }
 
 func (this_ *wsSess) IsConnected() bool {
-	return this_.connected
+	return atomic.LoadInt32(&this_.connected) == 1
 }
 
 func (this_ *wsSess) SockFd() int64 {
@@ -77,10 +78,7 @@ func (this_ *wsSess) Close() error {
 	}
 
 	err = this_.conn.Close()
-	if this_.connected {
-		this_.connected = false
-	}
-
+	atomic.StoreInt32(&this_.connected, 0)
 	return err
 }
 

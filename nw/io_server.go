@@ -285,7 +285,6 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		wg.Done()
 	}()
 
-	sess.connected = true
 	err = this_.service.OnConnected(sess)
 	if err != nil {
 		log.Error(err)

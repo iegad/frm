@@ -66,7 +66,7 @@ func (this_ *Rmq) Reconnect() error {
 	return nil
 }
 
-func (this_ *Rmq) GetChannel(key interface{}) (*amqp.Channel, error) {
+func (this_ *Rmq) GetChannel(key any) (*amqp.Channel, error) {
 	if this_.IsClosed() {
 		err := this_.Reconnect()
 		if err != nil {

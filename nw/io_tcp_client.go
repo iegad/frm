@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -12,7 +13,7 @@ import (
 
 // TcpClient TCP客户端
 type TcpClient struct {
-	connected    bool
+	connected    int32
 	tcpHeadBlend uint32
 	fd           int64
 	recvSeq      int64
@@ -58,7 +59,7 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 	fd := <-ch
 
 	return &TcpClient{
-		connected:    true,
+		connected:    1,
 		tcpHeadBlend: blend,
 		fd:           fd,
 		recvSeq:      0,
@@ -72,7 +73,7 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 }
 
 func (this_ *TcpClient) IsConnected() bool {
-	return this_.connected
+	return atomic.LoadInt32(&this_.connected) == 1
 }
 
 func (this_ *TcpClient) SockFd() int64 {
@@ -93,9 +94,7 @@ func (this_ *TcpClient) RealRemoteIP() string {
 
 func (this_ *TcpClient) Close() error {
 	err := this_.conn.Close()
-	if this_.connected {
-		this_.connected = false
-	}
+	atomic.StoreInt32(&this_.connected, 0)
 	return err
 }
 

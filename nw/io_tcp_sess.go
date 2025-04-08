@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -14,7 +15,7 @@ import (
 //
 //	TCP会话
 type tcpSess struct {
-	connected bool          // 是否处理连接
+	connected int32         // 是否处理连接
 	blend     uint32        // 消息头混合值
 	fd        int64         // 文件描述符
 	recvSeq   int64         // 接收序列
@@ -45,7 +46,7 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 	fd := <-ch
 
 	return &tcpSess{
-		connected: false,
+		connected: 1,
 		blend:     blend,
 		fd:        fd,
 		recvSeq:   0,
@@ -59,7 +60,7 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 }
 
 func (this_ *tcpSess) IsConnected() bool {
-	return this_.connected
+	return atomic.LoadInt32(&this_.connected) == 1
 }
 
 func (this_ *tcpSess) SockFd() int64 {
@@ -80,9 +81,7 @@ func (this_ *tcpSess) RealRemoteIP() string {
 
 func (this_ *tcpSess) Close() error {
 	err := this_.conn.Close()
-	if this_.connected {
-		this_.connected = false
-	}
+	atomic.StoreInt32(&this_.connected, 0)
 	return err
 }
 

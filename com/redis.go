@@ -14,15 +14,17 @@ type RedisConfig struct {
 }
 
 func NewRedisClient(c *RedisConfig) (*redis.Client, error) {
+	const timeout = time.Second * 15
+
 	r := redis.NewClient(&redis.Options{
 		Addr:        c.Addr,
 		Username:    c.Username,
 		Password:    c.Password,
-		DialTimeout: time.Second * 30,
-		IdleTimeout: time.Minute,
+		DialTimeout: timeout,
+		IdleTimeout: -1,
 	})
 
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*15)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
 
 	err := r.Ping(ctx).Err()
