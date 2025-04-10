@@ -20,7 +20,7 @@ type wsSess struct {
 	userData  any
 }
 
-func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*wsSess, error) {
+func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp string) (*wsSess, error) {
 	rawConn, err := conn.NetConn().(*net.TCPConn).SyscallConn()
 	if err != nil {
 		log.Error(err)
@@ -32,11 +32,6 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*
 		ch <- int64(fd)
 	})
 
-	ip := ""
-	if len(realIp) == 1 && len(realIp[0]) > 0 {
-		ip = realIp[0]
-	}
-
 	fd := <-ch
 
 	return &wsSess{
@@ -47,7 +42,7 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp ...string) (*
 		conn:      conn,
 		timeout:   timeout,
 		userData:  nil,
-		realIP:    ip,
+		realIP:    realIp,
 	}, nil
 }
 

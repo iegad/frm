@@ -13,16 +13,16 @@ import (
 
 // TcpClient TCP客户端
 type TcpClient struct {
-	connected    int32
-	tcpHeadBlend uint32
-	fd           int64
-	recvSeq      int64
-	sendSeq      int64
-	timeout      time.Duration
-	conn         *net.TCPConn
-	reader       *bufio.Reader
-	realIP       string
-	userData     any
+	connected    int32         // 连接状态
+	tcpHeadBlend uint32        // tcp 消息头混合值
+	fd           int64         // 原始文件描述符
+	recvSeq      int64         // 接收序列
+	sendSeq      int64         // 发送序列
+	timeout      time.Duration // 读超时
+	conn         *net.TCPConn  // 连接对象
+	reader       *bufio.Reader // 读缓冲区
+	realIP       string        // 真实IP
+	userData     any           // 用户数据
 }
 
 func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient, error) {
@@ -45,7 +45,8 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 		return nil, err
 	}
 
-	rawConn, err := conn.(*net.TCPConn).SyscallConn()
+	tcpConn := conn.(*net.TCPConn)
+	rawConn, err := tcpConn.SyscallConn()
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -65,9 +66,9 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 		recvSeq:      0,
 		sendSeq:      0,
 		timeout:      timeout,
-		conn:         conn.(*net.TCPConn),
-		reader:       bufio.NewReader(conn),
-		realIP:       conn.RemoteAddr().(*net.TCPAddr).IP.String(),
+		conn:         tcpConn,
+		reader:       bufio.NewReader(tcpConn),
+		realIP:       tcpConn.RemoteAddr().(*net.TCPAddr).IP.String(),
 		userData:     nil,
 	}, nil
 }
@@ -116,14 +117,14 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 		}
 	}
 
-	hbuf := make([]byte, UINT32_SIZE)
-	_, err := io.ReadAtLeast(this_.reader, hbuf, UINT32_SIZE)
+	hbuf := make([]byte, TCP_HEADER_SIZE)
+	_, err := io.ReadAtLeast(this_.reader, hbuf, TCP_HEADER_SIZE)
 	if err != nil {
 		return nil, err
 	}
 
 	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.tcpHeadBlend
-	if buflen == 0 || buflen > MAX_BUF_SIZE {
+	if buflen == 0 || buflen > TCP_MAX_SIZE {
 		return nil, ErrInvalidBufSize
 	}
 

@@ -7,8 +7,6 @@ import (
 	"net"
 	"sync/atomic"
 	"time"
-
-	"github.com/gox/frm/log"
 )
 
 // tcpSess
@@ -27,14 +25,11 @@ type tcpSess struct {
 	userData  any           // 用户数据
 }
 
+// 创建新的TCP会话
+//   - 该方法只会返回一种错误, 即 获取原始文件描述符失败
 func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSess, error) {
-	if blend == 0 {
-		log.Fatal("blend cannot be zero")
-	}
-
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
-		log.Error(err)
 		return nil, err
 	}
 
@@ -105,14 +100,14 @@ func (this_ *tcpSess) Read() ([]byte, error) {
 		}
 	}
 
-	hbuf := make([]byte, UINT32_SIZE)
-	_, err = io.ReadAtLeast(this_.reader, hbuf, UINT32_SIZE)
+	hbuf := make([]byte, TCP_HEADER_SIZE)
+	_, err = io.ReadAtLeast(this_.reader, hbuf, TCP_HEADER_SIZE)
 	if err != nil {
 		return nil, err
 	}
 
 	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.blend
-	if buflen == 0 || buflen > MAX_BUF_SIZE {
+	if buflen == 0 || buflen > TCP_MAX_SIZE {
 		return nil, ErrInvalidBufSize
 	}
 

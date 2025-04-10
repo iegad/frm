@@ -11,14 +11,14 @@ import (
 )
 
 type WsClient struct {
-	connected int32
-	fd        int64
-	recvSeq   int64
-	sendSeq   int64
-	timeout   time.Duration
-	conn      *websocket.Conn
-	realIP    string
-	userData  any
+	connected int32           // 连接状态
+	fd        int64           // 原始文件描述符
+	recvSeq   int64           // 接收序列
+	sendSeq   int64           // 发送序列
+	timeout   time.Duration   // 读超时
+	conn      *websocket.Conn // 连接对象
+	realIP    string          // 真实IP
+	userData  any             // 用户数据
 }
 
 func NewWsClient(addr string, timeout time.Duration) (*WsClient, error) {

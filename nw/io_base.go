@@ -13,12 +13,11 @@ import (
 )
 
 const (
-	DEFAULT_TIMEOUT int32 = 300
-	MAX_TIMEOUT     int32 = 600
-	UINT32_SIZE           = int(unsafe.Sizeof(uint32(0)))
-	MAX_BUF_SIZE          = 1024 * 1024 * 2
+	TCP_HEADER_SIZE = int(unsafe.Sizeof(uint32(0)))
+	TCP_MAX_SIZE    = 1024 * 1024 * 2
 )
 
+// 获取 Http/Websocket 客户端的真实IP
 func GetHttpRequestRealIP(r *http.Request) string {
 	ip := r.Header.Get("X-Forwarded-For")
 
@@ -51,9 +50,9 @@ func write(conn net.Conn, data []byte, timeout time.Duration, blend uint32) (int
 	}
 
 	dlen := len(data)
-	wbuf := make([]byte, dlen+UINT32_SIZE)
-	binary.BigEndian.PutUint32(wbuf[:UINT32_SIZE], uint32(dlen)^blend)
-	copy(wbuf[UINT32_SIZE:], data)
+	wbuf := make([]byte, dlen+TCP_HEADER_SIZE)
+	binary.BigEndian.PutUint32(wbuf[:TCP_HEADER_SIZE], uint32(dlen)^blend)
+	copy(wbuf[TCP_HEADER_SIZE:], data)
 	return conn.Write(wbuf)
 }
 

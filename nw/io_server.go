@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -51,7 +52,7 @@ type IoServer struct {
 	mtx          sync.Mutex                    // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
 	sessmap      *utils.SafeMap[string, ISess] // 会话集
 	wg           sync.WaitGroup                // 协程同步组
-	running      bool
+	running      int32                         // 运行状态
 }
 
 // 创建io server 实例
@@ -66,6 +67,10 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IoServer, error) {
 
 	if cfg.TcpPort == 0 && cfg.WsPort == 0 {
 		return nil, ErrNoListen
+	}
+
+	if cfg.Blend == 0 {
+		return nil, ErrBlend
 	}
 
 	var (
@@ -105,8 +110,9 @@ func NewIOServer(cfg *IOSConfig, service IService) (*IoServer, error) {
 		timeout:      time.Duration(cfg.Timeout) * time.Second,
 		service:      service,
 		mtx:          sync.Mutex{},
-		wg:           sync.WaitGroup{},
 		sessmap:      utils.NewSafeMap[string, ISess](),
+		wg:           sync.WaitGroup{},
+		running:      0,
 	}
 
 	if this_.wsAddr != nil {
@@ -139,7 +145,7 @@ func (this_ *IoServer) Stop() {
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
 
-	if !this_.running {
+	if atomic.LoadInt32(&this_.running) == 0 {
 		return
 	}
 
@@ -162,15 +168,16 @@ func (this_ *IoServer) Stop() {
 	}
 
 	// 清理所有会话
-	this_.sessmap.Range(func(remoteAddr string, value ISess) bool {
-		value.Close()
+	this_.sessmap.Range(func(remoteAddr string, sess ISess) bool {
+		sess.Close()
 		return true
 	})
 
+	this_.sessmap.Clear()
+	atomic.StoreInt32(&this_.running, 0)
+
 	// 服务会等待所有协程释放之后再返回
 	this_.wg.Wait()
-
-	this_.running = false
 	this_.service.OnStop(this_)
 }
 
@@ -190,28 +197,34 @@ func (this_ *IoServer) run() error {
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
 
-	if this_.running {
+	if atomic.LoadInt32(&this_.running) == 1 {
 		return nil
 	}
 
-	this_.running = true
+	atomic.StoreInt32(&this_.running, 1)
 
 	var err error
 
 	if this_.tcpAddr != nil {
 		this_.tcpListener, err = net.ListenTCP("tcp", this_.tcpAddr)
-		if err != nil {
-			log.Error(err)
-			return err
-		}
 	}
 
 	if this_.wsAddr != nil {
 		this_.wsListener, err = net.ListenTCP("tcp", this_.wsAddr)
-		if err != nil {
-			log.Error(err)
-			return err
+	}
+
+	if err != nil {
+		log.Error(err)
+
+		if this_.tcpListener != nil {
+			this_.tcpListener.Close()
 		}
+
+		if this_.wsListener != nil {
+			this_.wsListener.Close()
+		}
+
+		return err
 	}
 
 	err = this_.service.OnStart(this_)
@@ -242,8 +255,6 @@ func (this_ *IoServer) run() error {
 
 // 启动 tcp 监听服务
 func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
-	defer wg.Done()
-
 	maxConn := this_.maxConn
 
 	for {
@@ -265,6 +276,8 @@ func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 		wg.Add(1)
 		go this_.tcpConnHandle(conn, wg)
 	}
+
+	wg.Done()
 }
 
 // tcp conn 句柄
@@ -279,9 +292,9 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	var rbuf []byte
 
 	defer func() {
-		this_.service.OnDisconnect(sess)
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
+		this_.service.OnDisconnect(sess)
 		wg.Done()
 	}()
 
@@ -312,12 +325,11 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 
 // 启动 websocket 监听
 func (this_ *IoServer) wsRun(wg *sync.WaitGroup) {
-	defer wg.Done()
-
 	err := http.Serve(this_.wsListener, nil)
 	if err != nil {
 		log.Error(err)
 	}
+	wg.Done()
 }
 
 // http 转换 websocket
@@ -334,29 +346,28 @@ func (this_ *IoServer) wsUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 
 	this_.wg.Add(1)
+	go this_.wsConnHandle(conn, &this_.wg, GetHttpRequestRealIP(r))
+}
 
-	sess, err := newWsSess(conn, this_.timeout, GetHttpRequestRealIP(r))
+// websocket conn 句柄
+func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, realIP string) {
+	sess, err := newWsSess(conn, this_.timeout, realIP)
 	if err != nil {
 		log.Error(err)
 		conn.Close()
 		return
 	}
 
-	go this_.wsConnHandle(sess, &this_.wg)
-}
-
-// websocket conn 句柄
-func (this_ *IoServer) wsConnHandle(sess *wsSess, wg *sync.WaitGroup) {
 	var rbuf []byte
 
 	defer func() {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
-		this_.service.OnDisconnect(sess)
 		sess.Close()
+		this_.service.OnDisconnect(sess)
 		wg.Done()
 	}()
 
-	err := this_.service.OnConnected(sess)
+	err = this_.service.OnConnected(sess)
 	if err != nil {
 		log.Error(err)
 		return
