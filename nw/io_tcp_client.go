@@ -3,9 +3,12 @@ package nw
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -113,25 +116,37 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	if this_.timeout > 0 {
 		err := this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
-			return nil, err
+			if errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+				return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
+			}
+
+			return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), err)
 		}
 	}
 
 	hbuf := make([]byte, TCP_HEADER_SIZE)
 	_, err := io.ReadAtLeast(this_.reader, hbuf, TCP_HEADER_SIZE)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+			return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
+		}
+
+		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), err)
 	}
 
 	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.tcpHeadBlend
 	if buflen == 0 || buflen > TCP_MAX_SIZE {
-		return nil, ErrInvalidBufSize
+		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), ErrInvalidBufSize)
 	}
 
 	rbuf := make([]byte, buflen)
 	_, err = io.ReadAtLeast(this_.reader, rbuf, int(buflen))
 	if err != nil {
-		return nil, err
+		if errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+			return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
+		}
+
+		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), err)
 	}
 
 	this_.recvSeq++

@@ -1,9 +1,12 @@
 package nw
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -109,17 +112,29 @@ func (this_ *WsClient) Read() ([]byte, error) {
 	if this_.timeout > 0 {
 		err := this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
-			return nil, err
+			if errors.Is(err, syscall.ECONNRESET) || websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+				return nil, fmt.Errorf("WsClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
+			}
+
+			return nil, fmt.Errorf("WsClient[%v] ACTIVE close: %v", this_.RemoteAddr(), err)
 		}
 	}
 
 	t, data, err := this_.conn.ReadMessage()
 	if err != nil {
-		return nil, err
+		if errors.Is(err, syscall.ECONNRESET) || websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+			return nil, fmt.Errorf("WsClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
+		}
+
+		return nil, fmt.Errorf("WsClient[%v] ACTIVE close: %v", this_.RemoteAddr(), err)
 	}
 
 	if t != websocket.BinaryMessage {
-		return nil, ErrWsMsgTypeInvalid
+		if errors.Is(err, syscall.ECONNRESET) || websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+			return nil, fmt.Errorf("WsClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
+		}
+
+		return nil, fmt.Errorf("WsClient[%v] ACTIVE close: %v", this_.RemoteAddr(), ErrWsMsgTypeInvalid)
 	}
 
 	this_.recvSeq++
