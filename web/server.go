@@ -51,6 +51,6 @@ func (this_ *Server) Run() error {
 	return this_.router.RunListener(this_.listener)
 }
 
-func (this_ *Server) Close() {
+func (this_ *Server) Stop() {
 	this_.listener.Close()
 }
