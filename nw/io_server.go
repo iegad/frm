@@ -378,10 +378,11 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 	for {
 		rbuf, err = sess.Read()
 		if err != nil {
-			if errors.Is(err, syscall.ECONNRESET) || websocket.IsCloseError(err,
+			if websocket.IsCloseError(err,
+				websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure,
 				websocket.CloseGoingAway,
-				websocket.CloseNoStatusReceived) {
+				websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) {
 				log.Debug("WsSess[%v] PASSIVE close", sess.RemoteAddr())
 			} else {
 				log.Error("WsSess[%v] ACTIVE close. Error: %v", sess.RemoteAddr(), err)
