@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 type RedisConfig struct {
@@ -17,11 +17,11 @@ func NewRedisClient(c *RedisConfig) (*redis.Client, error) {
 	const timeout = time.Second * 15
 
 	r := redis.NewClient(&redis.Options{
-		Addr:        c.Addr,
-		Username:    c.Username,
-		Password:    c.Password,
-		DialTimeout: timeout,
-		IdleTimeout: -1,
+		Addr:            c.Addr,
+		Username:        c.Username,
+		Password:        c.Password,
+		DialTimeout:     timeout,
+		ConnMaxIdleTime: -1,
 	})
 
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)

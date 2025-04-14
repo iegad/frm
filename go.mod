@@ -12,9 +12,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.19
 	github.com/gin-contrib/cors v1.7.4
 	github.com/gin-gonic/gin v1.10.0
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.9.1
 	github.com/gorilla/websocket v1.5.3
+	github.com/redis/go-redis/v9 v9.7.3
 	github.com/streadway/amqp v1.1.0
 	go.mongodb.org/mongo-driver v1.17.3
 	google.golang.org/protobuf v1.36.6
