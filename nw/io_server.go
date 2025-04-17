@@ -214,8 +214,6 @@ func (this_ *IoServer) run() error {
 	}
 
 	if err != nil {
-		log.Error(err)
-
 		if this_.tcpListener != nil {
 			this_.tcpListener.Close()
 		}
