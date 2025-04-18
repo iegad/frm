@@ -67,14 +67,17 @@ func (this_ *wsSess) RealRemoteIP() string {
 }
 
 func (this_ *wsSess) Close() error {
-	err := this_.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
-	if err != nil {
-		log.Warn("WsSess[%v] write control close message failed: %v", this_.realIP, err)
+	if atomic.CompareAndSwapInt32(&this_.connected, 1, 0) {
+		err := this_.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
+		if err != nil {
+			log.Warn("WsSess[%v] write control close message failed: %v", this_.realIP, err)
+		}
+
+		err = this_.conn.Close()
+		return err
 	}
 
-	err = this_.conn.Close()
-	atomic.StoreInt32(&this_.connected, 0)
-	return err
+	return nil
 }
 
 func (this_ *wsSess) Write(data []byte) (int, error) {

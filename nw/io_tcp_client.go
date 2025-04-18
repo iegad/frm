@@ -97,9 +97,11 @@ func (this_ *TcpClient) RealRemoteIP() string {
 }
 
 func (this_ *TcpClient) Close() error {
-	err := this_.conn.Close()
-	atomic.StoreInt32(&this_.connected, 0)
-	return err
+	if atomic.CompareAndSwapInt32(&this_.connected, 1, 0) {
+		return this_.conn.Close()
+	}
+
+	return nil
 }
 
 func (this_ *TcpClient) Write(data []byte) (int, error) {
