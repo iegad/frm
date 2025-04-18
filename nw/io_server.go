@@ -145,7 +145,7 @@ func (this_ *IoServer) Stop() {
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
 
-	if atomic.LoadInt32(&this_.running) == 0 {
+	if !atomic.CompareAndSwapInt32(&this_.running, 1, 0) {
 		return
 	}
 
@@ -174,7 +174,6 @@ func (this_ *IoServer) Stop() {
 	})
 
 	this_.sessmap.Clear()
-	atomic.StoreInt32(&this_.running, 0)
 
 	// 服务会等待所有协程释放之后再返回
 	this_.wg.Wait()
@@ -197,11 +196,9 @@ func (this_ *IoServer) run() error {
 	this_.mtx.Lock()
 	defer this_.mtx.Unlock()
 
-	if atomic.LoadInt32(&this_.running) == 1 {
+	if !atomic.CompareAndSwapInt32(&this_.running, 0, 1) {
 		return nil
 	}
-
-	atomic.StoreInt32(&this_.running, 1)
 
 	var err error
 
@@ -307,10 +304,10 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	for {
 		rbuf, err = sess.Read()
 		if err != nil {
-			if errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+			if err == io.EOF || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
 				log.Debug("TcpSess[%v] PASSIVE close", sess.RemoteAddr())
 			} else {
-				log.Error("TcpSess[%v] ACTIVE close. Error: %v", sess.RemoteAddr(), err)
+				log.Error("TcpSess[%v] ACTIVE close. Error: [%T]%v", sess.RemoteAddr(), err, err)
 			}
 			break
 		}
@@ -380,7 +377,7 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 				websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure,
 				websocket.CloseGoingAway,
-				websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) {
+				websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
 				log.Debug("WsSess[%v] PASSIVE close", sess.RemoteAddr())
 			} else {
 				log.Error("WsSess[%v] ACTIVE close. Error: %v", sess.RemoteAddr(), err)

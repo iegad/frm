@@ -69,7 +69,7 @@ func (this_ *wsSess) RealRemoteIP() string {
 func (this_ *wsSess) Close() error {
 	err := this_.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
 	if err != nil {
-		log.Error("WsSess[%v] write control close message failed: %v", this_.realIP, err)
+		log.Warn("WsSess[%v] write control close message failed: %v", this_.realIP, err)
 	}
 
 	err = this_.conn.Close()
