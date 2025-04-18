@@ -15,7 +15,7 @@ type IService interface {
 	// 会话连接断开事件
 	//  - 当会话关闭时触发
 	//  - 在该事件句柄框架会自动调用 sess.Close, 所以无需在该句柄中手动关闭会话
-	OnDisconnect(sess ISess)
+	OnDisconnected(sess ISess)
 
 	// 接收数据事件
 	//  - 当 read 到有效数据时触发
@@ -25,11 +25,11 @@ type IService interface {
 	// 服务启动事件
 	//  - 在创建监听对象后, 监听(Accept)之前触发
 	//  - 当该接口返回 err 时, 服务将关闭
-	OnStart(ios *IoServer) error
+	OnStarted(ios *IoServer) error
 
 	// 服务停止事件
 	//  - 在服务收到停止请求后, 停止服务前触发
-	OnStop(ios *IoServer)
+	OnStopped(ios *IoServer)
 }
 
 // ISess 引擎接口

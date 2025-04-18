@@ -178,7 +178,7 @@ func (this_ *IoServer) Stop() {
 
 	// 服务会等待所有协程释放之后再返回
 	this_.wg.Wait()
-	this_.service.OnStop(this_)
+	this_.service.OnStopped(this_)
 }
 
 // 启动服务(阻塞)
@@ -225,7 +225,7 @@ func (this_ *IoServer) run() error {
 		return err
 	}
 
-	err = this_.service.OnStart(this_)
+	err = this_.service.OnStarted(this_)
 	if err != nil {
 		if this_.tcpListener != nil {
 			this_.tcpListener.Close()
@@ -292,7 +292,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	defer func() {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
-		this_.service.OnDisconnect(sess)
+		this_.service.OnDisconnected(sess)
 		wg.Done()
 	}()
 
@@ -361,7 +361,7 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 	defer func() {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
-		this_.service.OnDisconnect(sess)
+		this_.service.OnDisconnected(sess)
 		wg.Done()
 	}()
 

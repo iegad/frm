@@ -14,7 +14,7 @@ func (this_ *EchoService) OnConnected(sess nw.ISess) error {
 	return nil
 }
 
-func (this_ *EchoService) OnDisconnect(sess nw.ISess) {
+func (this_ *EchoService) OnDisconnected(sess nw.ISess) {
 	log.Info("[%d]%v has disconnected", sess.SockFd(), sess.RemoteAddr().String())
 }
 
@@ -29,12 +29,12 @@ func (this_ *EchoService) OnData(sess nw.ISess, data []byte) bool {
 	return true
 }
 
-func (this_ *EchoService) OnStart(ios *nw.IoServer) error {
+func (this_ *EchoService) OnStarted(ios *nw.IoServer) error {
 	log.Info("running ...: %v, %v", ios.TcpAddr(), ios.WsAddr())
 	return nil
 }
 
-func (this_ *EchoService) OnStop(ios *nw.IoServer) {
+func (this_ *EchoService) OnStopped(ios *nw.IoServer) {
 	log.Info("stop !!!")
 }
 
