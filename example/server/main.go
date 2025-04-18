@@ -40,7 +40,7 @@ func (this_ *EchoService) OnStopped(ios *nw.IoServer) {
 
 func main() {
 	ios, err := nw.NewIOServer(&nw.IOSConfig{
-		IP:      "",
+		IP:      "127.0.0.1",
 		WsPort:  8081,
 		TcpPort: 8080,
 		Timeout: 300,
@@ -50,5 +50,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ios.Run()
+	err = ios.Run()
+	if err != nil {
+		log.Error(err)
+	}
 }
