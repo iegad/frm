@@ -20,7 +20,7 @@ func (this_ *RabbitConfig) Uri() string {
 
 type Rabbit struct {
 	conn   *amqp.Connection
-	url    string
+	uri    string
 	chMap  sync.Map
 	conmtx sync.Mutex
 }
@@ -35,8 +35,12 @@ func NewRabbit(config *RabbitConfig) (*Rabbit, error) {
 	return &Rabbit{
 		conn:  conn,
 		chMap: sync.Map{},
-		url:   url,
+		uri:   url,
 	}, nil
+}
+
+func (this_ *Rabbit) Uri() string {
+	return this_.uri
 }
 
 func (this_ *Rabbit) Close() {
@@ -65,7 +69,7 @@ func (this_ *Rabbit) Connect() error {
 		return nil
 	}
 
-	conn, err := amqp.Dial(this_.url)
+	conn, err := amqp.Dial(this_.uri)
 	if err != nil {
 		return err
 	}
