@@ -47,6 +47,19 @@ func (this_ *SafeMap[K, V]) Clear() {
 	this_.mtx.Unlock()
 }
 
+// 存在返回 false, 否则返回 true
+func (this_ *SafeMap[K, V]) SetNx(key K, value V) bool {
+	res := false
+	this_.mtx.Lock()
+	_, ok := this_.m[key]
+	if !ok {
+		this_.m[key] = value
+		res = true
+	}
+	this_.mtx.Unlock()
+	return res
+}
+
 func (this_ *SafeMap[K, V]) Range(handler func(key K, v V) bool) {
 	if handler != nil {
 		this_.mtx.RLock()

@@ -13,7 +13,7 @@ type RedisConfig struct {
 	Password string `yaml:"password"`
 }
 
-func NewRedisClient(c *RedisConfig) (*redis.Client, error) {
+func NewRedis(c *RedisConfig) (*redis.Client, error) {
 	const timeout = time.Second * 15
 
 	r := redis.NewClient(&redis.Options{
