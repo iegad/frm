@@ -119,7 +119,7 @@ func (this_ *WsClient) Read() ([]byte, error) {
 				websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure,
 				websocket.CloseGoingAway,
-				websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+				websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) || errors.Is(err, syscall.WSAECONNABORTED) {
 				return nil, fmt.Errorf("WsClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
 			}
 
@@ -133,7 +133,7 @@ func (this_ *WsClient) Read() ([]byte, error) {
 			websocket.CloseAbnormalClosure,
 			websocket.CloseNormalClosure,
 			websocket.CloseGoingAway,
-			websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+			websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) || errors.Is(err, syscall.WSAECONNABORTED) {
 			return nil, fmt.Errorf("WsClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
 		}
 
@@ -141,14 +141,6 @@ func (this_ *WsClient) Read() ([]byte, error) {
 	}
 
 	if t != websocket.BinaryMessage {
-		if websocket.IsCloseError(err,
-			websocket.CloseAbnormalClosure,
-			websocket.CloseNormalClosure,
-			websocket.CloseGoingAway,
-			websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
-			return nil, fmt.Errorf("WsClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
-		}
-
 		return nil, fmt.Errorf("WsClient[%v] ACTIVE close: %v", this_.RemoteAddr(), ErrWsMsgTypeInvalid)
 	}
 
