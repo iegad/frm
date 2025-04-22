@@ -8,9 +8,9 @@ import (
 )
 
 type RabbitConfig struct {
+	Host     string `yaml:"host"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
-	Host     string `yaml:"host"`
 	VHost    string `yaml:"vhost"`
 }
 
