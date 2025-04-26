@@ -3,12 +3,10 @@ package nw
 import (
 	"bufio"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -118,7 +116,7 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	if this_.timeout > 0 {
 		err := this_.conn.SetReadDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
-			if err == io.EOF || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+			if err == io.EOF || IsConnReset(err) {
 				return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
 			}
 
@@ -129,7 +127,7 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	hbuf := make([]byte, TCP_HEADER_SIZE)
 	_, err := io.ReadAtLeast(this_.reader, hbuf, TCP_HEADER_SIZE)
 	if err != nil {
-		if err == io.EOF || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+		if err == io.EOF || IsConnReset(err) {
 			return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
 		}
 
@@ -144,7 +142,7 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	rbuf := make([]byte, buflen)
 	_, err = io.ReadAtLeast(this_.reader, rbuf, int(buflen))
 	if err != nil {
-		if err == io.EOF || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+		if err == io.EOF || IsConnReset(err) {
 			return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
 		}
 

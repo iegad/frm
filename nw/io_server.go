@@ -1,7 +1,6 @@
 package nw
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -10,7 +9,6 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -304,7 +302,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	for {
 		rbuf, err = sess.Read()
 		if err != nil {
-			if err == io.EOF || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+			if err == io.EOF || IsConnReset(err) {
 				log.Debug("TcpSess[%v] PASSIVE close", sess.RemoteAddr())
 			} else {
 				log.Error("TcpSess[%v] ACTIVE close. Error: [%T]%v", sess.RemoteAddr(), err, err)
@@ -377,7 +375,7 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 				websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure,
 				websocket.CloseGoingAway,
-				websocket.CloseNoStatusReceived) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.WSAECONNRESET) {
+				websocket.CloseNoStatusReceived) || IsConnReset(err) {
 				log.Debug("WsSess[%v] PASSIVE close", sess.RemoteAddr())
 			} else {
 				log.Error("WsSess[%v] ACTIVE close. Error: %v", sess.RemoteAddr(), err)
