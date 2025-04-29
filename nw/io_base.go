@@ -17,6 +17,8 @@ const (
 	TCP_MAX_SIZE    = 1024 * 1024 * 2
 )
 
+var errDataTooLong = errors.New("data too long")
+
 // 获取 Http/Websocket 客户端的真实IP
 func GetHttpRequestRealIP(r *http.Request) string {
 	ip := r.Header.Get("X-Forwarded-For")
@@ -50,6 +52,10 @@ func write(conn net.Conn, data []byte, timeout time.Duration, blend uint32) (int
 	}
 
 	dlen := len(data)
+	if dlen > TCP_MAX_SIZE {
+		return -1, errDataTooLong
+	}
+
 	wbuf := make([]byte, dlen+TCP_HEADER_SIZE)
 	binary.BigEndian.PutUint32(wbuf[:TCP_HEADER_SIZE], uint32(dlen)^blend)
 	copy(wbuf[TCP_HEADER_SIZE:], data)
