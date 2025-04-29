@@ -130,3 +130,23 @@ func (this_ *Rabbit) DeleteQueue(chKey, qName string) error {
 
 	return err
 }
+
+func (this_ *Rabbit) Publish(chKey, qName string, msg []byte) error {
+	ch, err := this_.GetChannel(chKey)
+	if err != nil {
+		return err
+	}
+
+	err = ch.Publish("", qName, false, false, amqp.Publishing{
+		ContentType: "text/plain",
+		Body:        msg,
+	})
+	if err != nil {
+		if err == amqp.ErrClosed {
+			this_.Close()
+		}
+		return err
+	}
+
+	return nil
+}
