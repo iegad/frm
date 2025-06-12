@@ -87,6 +87,18 @@ func (this_ *tcpSess) Close() error {
 }
 
 func (this_ *tcpSess) Write(data []byte) (int, error) {
+	if len(data) > TCP_MAX_SIZE {
+		log.Error("TcpSess[%v] Write data size[%d] exceeds max size[%d]", this_.RemoteAddr(), len(data), TCP_MAX_SIZE)
+		return -1, ErrInvalidBufSize
+	}
+
+	if this_.timeout > 0 {
+		err := this_.conn.SetWriteDeadline(time.Now().Add(this_.timeout))
+		if err != nil {
+			return -1, err
+		}
+	}
+
 	data, err := this_.service.OnEncrypt(data)
 	if err != nil {
 		log.Error("TcpSess[%v] Encrypt error: %v", this_.RemoteAddr(), err)

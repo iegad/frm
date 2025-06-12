@@ -4,6 +4,9 @@ import (
 	"net"
 )
 
+type EncryptHandler func(data []byte) ([]byte, error)
+type DecryptHandler func(data []byte) ([]byte, error)
+
 // IService 引擎接口
 //   - 服务端接口
 type IService interface {

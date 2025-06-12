@@ -14,19 +14,21 @@ import (
 
 // TcpClient TCP客户端
 type TcpClient struct {
-	connected    int32         // 连接状态
-	tcpHeadBlend uint32        // tcp 消息头混合值
-	fd           int64         // 原始文件描述符
-	recvSeq      int64         // 接收序列
-	sendSeq      int64         // 发送序列
-	timeout      time.Duration // 读超时
-	conn         *net.TCPConn  // 连接对象
-	reader       *bufio.Reader // 读缓冲区
-	realIP       string        // 真实IP
-	userData     any           // 用户数据
+	connected    int32          // 连接状态
+	tcpHeadBlend uint32         // tcp 消息头混合值
+	fd           int64          // 原始文件描述符
+	recvSeq      int64          // 接收序列
+	sendSeq      int64          // 发送序列
+	timeout      time.Duration  // 读超时
+	conn         *net.TCPConn   // 连接对象
+	reader       *bufio.Reader  // 读缓冲区
+	realIP       string         // 真实IP
+	onEncrypt    EncryptHandler // 加密函数
+	onDecrypt    DecryptHandler // 解密函数
+	userData     any            // 用户数据
 }
 
-func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient, error) {
+func NewTcpClient(host string, timeout time.Duration, blend uint32, onEncrypt EncryptHandler, onDecrypt DecryptHandler) (*TcpClient, error) {
 	if blend == 0 {
 		log.Fatal("blend cannot be zero")
 	}
@@ -70,6 +72,8 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient,
 		conn:         tcpConn,
 		reader:       bufio.NewReader(tcpConn),
 		realIP:       tcpConn.RemoteAddr().(*net.TCPAddr).IP.String(),
+		onEncrypt:    onEncrypt,
+		onDecrypt:    onDecrypt,
 		userData:     nil,
 	}, nil
 }
@@ -103,6 +107,30 @@ func (this_ *TcpClient) Close() error {
 }
 
 func (this_ *TcpClient) Write(data []byte) (int, error) {
+	var err error
+
+	if len(data) > TCP_MAX_SIZE {
+		return -1, fmt.Errorf("TcpClient[%v] write data size[%d] exceeds max size[%d]", this_.RemoteAddr(), len(data), TCP_MAX_SIZE)
+	}
+
+	if !this_.IsConnected() {
+		return -1, fmt.Errorf("TcpClient[%v] is not connected", this_.RemoteAddr())
+	}
+
+	if this_.timeout > 0 {
+		err = this_.conn.SetWriteDeadline(time.Now().Add(this_.timeout))
+		if err != nil {
+			return -1, fmt.Errorf("TcpClient[%v] write deadline error: %v", this_.RemoteAddr(), err)
+		}
+	}
+
+	if this_.onEncrypt != nil {
+		data, err = this_.onEncrypt(data)
+		if err != nil {
+			return -1, fmt.Errorf("TcpClient[%v] encrypt error: %v", this_.RemoteAddr(), err)
+		}
+	}
+
 	n, err := write(this_.conn, data, this_.timeout, this_.tcpHeadBlend)
 	if err != nil {
 		return -1, err

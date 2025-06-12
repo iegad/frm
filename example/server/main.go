@@ -38,6 +38,14 @@ func (this_ *EchoService) OnStopped(ios *nw.IoServer) {
 	log.Info("stop !!!")
 }
 
+func (this_ *EchoService) OnDecrypt(data []byte) ([]byte, error) {
+	return data, nil
+}
+
+func (this_ *EchoService) OnEncrypt(data []byte) ([]byte, error) {
+	return data, nil
+}
+
 func main() {
 	ios, err := nw.NewIOServer(&nw.IOSConfig{
 		IP:      "127.0.0.1",

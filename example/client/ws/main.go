@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	c, err := nw.NewWsClient("127.0.0.1:8081", time.Minute)
+	c, err := nw.NewWsClient("127.0.0.1:8081", time.Minute, nil, nil)
 	if err != nil {
 		log.Error(err)
 		return

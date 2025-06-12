@@ -344,7 +344,7 @@ func (this_ *IoServer) wsUpgrade(w http.ResponseWriter, r *http.Request) {
 
 // websocket conn 句柄
 func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, realIP string) {
-	sess, err := newWsSess(conn, this_.timeout, realIP)
+	sess, err := newWsSess(conn, this_.timeout, realIP, this_.service)
 	if err != nil {
 		log.Error(err)
 		conn.Close()

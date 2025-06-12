@@ -17,10 +17,11 @@ type wsSess struct {
 	timeout   time.Duration
 	conn      *websocket.Conn
 	realIP    string
+	service   IService
 	userData  any
 }
 
-func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp string) (*wsSess, error) {
+func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp string, service IService) (*wsSess, error) {
 	rawConn, err := conn.NetConn().(*net.TCPConn).SyscallConn()
 	if err != nil {
 		log.Error(err)
@@ -41,8 +42,9 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp string) (*wsS
 		sendSeq:   0,
 		conn:      conn,
 		timeout:   timeout,
-		userData:  nil,
 		realIP:    realIp,
+		service:   service,
+		userData:  nil,
 	}, nil
 }
 
@@ -81,8 +83,15 @@ func (this_ *wsSess) Close() error {
 }
 
 func (this_ *wsSess) Write(data []byte) (int, error) {
+	data, err := this_.service.OnEncrypt(data)
+	if err != nil {
+		log.Error("WsSess[%v] OnEncrypt failed: %v", this_.realIP, err)
+		return -1, err
+	}
+
 	this_.sendSeq++
-	err := this_.conn.WriteMessage(websocket.BinaryMessage, data)
+
+	err = this_.conn.WriteMessage(websocket.BinaryMessage, data)
 	if err != nil {
 		return -1, err
 	}
@@ -105,6 +114,12 @@ func (this_ *wsSess) Read() ([]byte, error) {
 
 	if t != websocket.BinaryMessage {
 		return nil, ErrWsMsgTypeInvalid
+	}
+
+	data, err = this_.service.OnDecrypt(data)
+	if err != nil {
+		log.Error("WsSess[%v] OnDecrypt failed: %v", this_.realIP, err)
+		return nil, err
 	}
 
 	this_.recvSeq++

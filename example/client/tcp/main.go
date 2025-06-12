@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	c, err := nw.NewTcpClient(":8080", 0, 0x12345678)
+	c, err := nw.NewTcpClient(":8080", 0, 0x12345678, nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
