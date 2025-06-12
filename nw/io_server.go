@@ -275,7 +275,7 @@ func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 
 // tcp conn 句柄
 func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
-	sess, err := newTcpSess(conn, this_.timeout, this_.tcpHeadBlend)
+	sess, err := newTcpSess(conn, this_.timeout, this_.tcpHeadBlend, this_.service)
 	if err != nil {
 		log.Error(err)
 		conn.Close()

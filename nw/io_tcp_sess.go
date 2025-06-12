@@ -7,6 +7,8 @@ import (
 	"net"
 	"sync/atomic"
 	"time"
+
+	"github.com/gox/frm/log"
 )
 
 // tcpSess
@@ -22,12 +24,13 @@ type tcpSess struct {
 	conn      *net.TCPConn  // 连接对象
 	reader    *bufio.Reader // 读缓冲区
 	realIP    string        // 真实IP
+	service   IService      // 服务实例
 	userData  any           // 用户数据
 }
 
 // 创建新的TCP会话
 //   - 该方法只会返回一种错误, 即 获取原始文件描述符失败
-func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSess, error) {
+func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32, service IService) (*tcpSess, error) {
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -50,6 +53,7 @@ func newTcpSess(conn *net.TCPConn, timeout time.Duration, blend uint32) (*tcpSes
 		conn:      conn,
 		reader:    bufio.NewReader(conn),
 		realIP:    conn.RemoteAddr().(*net.TCPAddr).IP.String(),
+		service:   service,
 		userData:  nil,
 	}, nil
 }
@@ -83,6 +87,12 @@ func (this_ *tcpSess) Close() error {
 }
 
 func (this_ *tcpSess) Write(data []byte) (int, error) {
+	data, err := this_.service.OnEncrypt(data)
+	if err != nil {
+		log.Error("TcpSess[%v] Encrypt error: %v", this_.RemoteAddr(), err)
+		return -1, err
+	}
+
 	n, err := write(this_.conn, data, this_.timeout, this_.blend)
 	if err != nil {
 		return -1, err
@@ -116,6 +126,12 @@ func (this_ *tcpSess) Read() ([]byte, error) {
 	rbuf := make([]byte, buflen)
 	_, err = io.ReadAtLeast(this_.reader, rbuf, int(buflen))
 	if err != nil {
+		return nil, err
+	}
+
+	rbuf, err = this_.service.OnDecrypt(rbuf)
+	if err != nil {
+		log.Error("TcpSess[%v] Decrypt error: %v", this_.RemoteAddr(), err)
 		return nil, err
 	}
 

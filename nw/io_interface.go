@@ -30,6 +30,14 @@ type IService interface {
 	// 服务停止事件
 	//  - 在服务收到停止请求后, 停止服务前触发
 	OnStopped(ios *IoServer)
+
+	// 加密事件
+	//  - 当会话创建时, 如果服务端或客户端实现了加密接口, 则会触发该事件
+	OnEncrypt(data []byte) ([]byte, error)
+
+	// 解密事件
+	//  - 当会话创建时, 如果服务端或客户端实现了解密接口, 则会触发该事件
+	OnDecrypt(data []byte) ([]byte, error)
 }
 
 // ISess 引擎接口
