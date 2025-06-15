@@ -48,9 +48,9 @@ func (this_ *EchoService) OnEncrypt(data []byte) ([]byte, error) {
 
 func main() {
 	ios, err := nw.NewIOServer(&nw.IOSConfig{
-		IP:      "127.0.0.1",
-		WsPort:  8081,
-		TcpPort: 8080,
+		IP:      "0.0.0.0",
+		WsPort:  9091,
+		TcpPort: 9090,
 		Timeout: 300,
 		Blend:   0x12345678,
 	}, &EchoService{})
