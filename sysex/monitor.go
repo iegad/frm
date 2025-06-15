@@ -1,4 +1,4 @@
-package sys
+package sysex
 
 import (
 	"time"
