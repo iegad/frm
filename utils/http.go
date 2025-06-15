@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 func HttpPostJson(url string, jsonData []byte) ([]byte, error) {
@@ -28,6 +29,25 @@ func HttpPostJson(url string, jsonData []byte) ([]byte, error) {
 	}
 
 	body, err := io.ReadAll(data.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+func HttpGet(url string, timeout int64) ([]byte, error) {
+	c := &http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+	}
+
+	rsp, err := c.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer rsp.Body.Close()
+
+	body, err := io.ReadAll(rsp.Body)
 	if err != nil {
 		return nil, err
 	}
