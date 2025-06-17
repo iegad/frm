@@ -131,7 +131,7 @@ func (this_ *tcpSess) Write(data []byte) (int, error) {
 	}
 
 	this_.sendSeq++
-	return n, err
+	return n - TCP_HEADER_SIZE, err
 }
 
 func (this_ *tcpSess) Read() ([]byte, error) {

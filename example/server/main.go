@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/gox/frm/log"
 	"github.com/gox/frm/nw"
-	"github.com/gox/frm/utils"
 )
 
 type EchoService struct {
@@ -19,7 +18,7 @@ func (this_ *EchoService) OnDisconnected(sess nw.ISess) {
 }
 
 func (this_ *EchoService) OnData(sess nw.ISess, data []byte) bool {
-	log.Info("recvSeq: %v, %v", sess.GetRecvSeq(), *utils.Bytes2Str(data))
+	// log.Info("recvSeq: %v, %v", sess.GetRecvSeq(), *utils.Bytes2Str(data))
 	_, err := sess.Write(data)
 	if err != nil {
 		log.Error(err)
