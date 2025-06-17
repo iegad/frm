@@ -83,7 +83,7 @@ func (this_ *wsSess) Close() error {
 }
 
 func (this_ *wsSess) Write(data []byte) (int, error) {
-	data, err := this_.service.OnEncrypt(data)
+	data, err := this_.OnEncrypt(data)
 	if err != nil {
 		log.Error("WsSess[%v] OnEncrypt failed: %v", this_.realIP, err)
 		return -1, err
@@ -116,7 +116,7 @@ func (this_ *wsSess) Read() ([]byte, error) {
 		return nil, ErrWsMsgTypeInvalid
 	}
 
-	data, err = this_.service.OnDecrypt(data)
+	data, err = this_.OnDecrypt(data)
 	if err != nil {
 		log.Error("WsSess[%v] OnDecrypt failed: %v", this_.realIP, err)
 		return nil, err
@@ -140,4 +140,12 @@ func (this_ *wsSess) GetRecvSeq() int64 {
 
 func (this_ *wsSess) GetSendSeq() int64 {
 	return this_.sendSeq
+}
+
+func (this_ *wsSess) OnEncrypt(data []byte) ([]byte, error) {
+	return this_.service.OnEncrypt(data)
+}
+
+func (this_ *wsSess) OnDecrypt(data []byte) ([]byte, error) {
+	return this_.service.OnDecrypt(data)
 }

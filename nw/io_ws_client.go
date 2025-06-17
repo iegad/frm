@@ -102,9 +102,11 @@ func (this_ *WsClient) Write(data []byte) (int, error) {
 		}
 	}
 
-	data, err = this_.onEncrypt(data)
-	if err != nil {
-		return -1, fmt.Errorf("WsClient[%v] encrypt error: %v", this_.RemoteAddr(), err)
+	if this_.onEncrypt != nil {
+		data, err = this_.onEncrypt(data)
+		if err != nil {
+			return -1, fmt.Errorf("WsClient[%v] encrypt error: %v", this_.RemoteAddr(), err)
+		}
 	}
 
 	err = this_.conn.WriteMessage(websocket.BinaryMessage, data)

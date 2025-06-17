@@ -25,7 +25,7 @@ func (this_ *EchoService) OnData(sess nw.ISess, data []byte) bool {
 		log.Error(err)
 		return false
 	}
-	log.Info("sendSeq: %v", sess.GetSendSeq())
+
 	return true
 }
 

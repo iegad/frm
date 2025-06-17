@@ -25,6 +25,8 @@ type TcpClient struct {
 	realIP       string         // 真实IP
 	onEncrypt    EncryptHandler // 加密函数
 	onDecrypt    DecryptHandler // 解密函数
+	hbuf         []byte         // tcp header buffer
+	dbuf         []byte         // tcp data buffer
 	userData     any            // 用户数据
 }
 
@@ -74,6 +76,8 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32, onEncrypt En
 		realIP:       tcpConn.RemoteAddr().(*net.TCPAddr).IP.String(),
 		onEncrypt:    onEncrypt,
 		onDecrypt:    onDecrypt,
+		hbuf:         make([]byte, TCP_HEADER_SIZE),
+		dbuf:         make([]byte, TCP_MAX_SIZE),
 		userData:     nil,
 	}, nil
 }
@@ -152,8 +156,7 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 		}
 	}
 
-	hbuf := make([]byte, TCP_HEADER_SIZE)
-	_, err := io.ReadAtLeast(this_.reader, hbuf, TCP_HEADER_SIZE)
+	_, err := io.ReadAtLeast(this_.reader, this_.hbuf, TCP_HEADER_SIZE)
 	if err != nil {
 		if err == io.EOF || IsConnReset(err) {
 			return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
@@ -162,13 +165,12 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), err)
 	}
 
-	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.tcpHeadBlend
+	buflen := binary.BigEndian.Uint32(this_.hbuf) ^ this_.tcpHeadBlend
 	if buflen == 0 || buflen > TCP_MAX_SIZE {
 		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), ErrInvalidBufSize)
 	}
 
-	rbuf := make([]byte, buflen)
-	_, err = io.ReadAtLeast(this_.reader, rbuf, int(buflen))
+	_, err = io.ReadAtLeast(this_.reader, this_.dbuf, int(buflen))
 	if err != nil {
 		if err == io.EOF || IsConnReset(err) {
 			return nil, fmt.Errorf("TcpClient[%v] PASSIVE close: %v", this_.RemoteAddr(), err)
@@ -178,7 +180,7 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 	}
 
 	this_.recvSeq++
-	return rbuf, nil
+	return this_.dbuf[:buflen], nil
 }
 
 func (this_ *TcpClient) GetUserData() any {

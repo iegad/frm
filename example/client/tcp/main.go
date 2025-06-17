@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	N = 1000
+	N     = 1000
+	NCONN = 1
 )
 
 var (
@@ -24,7 +25,7 @@ var (
 func testClient(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	c, err := nw.NewTcpClient("18.166.30.234:9090", 0, 0x12345678, nil, nil)
+	c, err := nw.NewTcpClient("127.0.0.1:9090", 0, 0x12345678, nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -33,16 +34,17 @@ func testClient(wg *sync.WaitGroup) {
 
 	for i := 0; i < N; i++ {
 		str := fmt.Sprintf("Hello world: %v", i)
-		wdata := utils.Str2Bytes(str)
-		ssize += int64(len(*wdata))
+		wdata := *utils.Str2Bytes(str)
+		wlen := int64(len(wdata))
+		log.Debug("发送长度: %d", wlen)
 
-		atomic.AddInt64(&rsize, int64(len(*wdata)))
-
-		_, err = c.Write(*wdata)
+		_, err = c.Write(wdata)
 		if err != nil {
 			log.Error(err)
 			break
 		}
+
+		atomic.AddInt64(&ssize, wlen)
 
 		rdata, err := c.Read()
 		if err != nil {
@@ -60,8 +62,8 @@ func main() {
 
 	wg := sync.WaitGroup{}
 
-	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	wg.Add(NCONN)
+	for i := 0; i < NCONN; i++ {
 		go testClient(&wg)
 	}
 

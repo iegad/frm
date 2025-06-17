@@ -81,6 +81,10 @@ type ISess interface {
 	// 获取发送序号
 	//  - 发送序号会在每次成功发送数据后 +1
 	GetSendSeq() int64
+
+	OnEncrypt(data []byte) ([]byte, error)
+
+	OnDecrypt(data []byte) ([]byte, error)
 }
 
 // IClient 引擎接口

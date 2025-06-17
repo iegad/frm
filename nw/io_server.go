@@ -16,11 +16,15 @@ import (
 	"github.com/gox/frm/utils"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	sessPool = utils.NewPool[tcpSess]()
+)
 
 // IO服务配置
 type IOSConfig struct {
@@ -275,7 +279,8 @@ func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 
 // tcp conn 句柄
 func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
-	sess, err := newTcpSess(conn, this_.timeout, this_.tcpHeadBlend, this_.service)
+	sess := sessPool.Get()
+	err := sess.init(conn, this_.timeout, this_.tcpHeadBlend, this_.service)
 	if err != nil {
 		log.Error(err)
 		conn.Close()
@@ -288,6 +293,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
 		this_.service.OnDisconnected(sess)
+		sessPool.Put(sess)
 		wg.Done()
 	}()
 
