@@ -24,8 +24,7 @@ var (
 		},
 	}
 
-	messageWorkerIndex uint64 = 0 // 消息工作协程索引
-	MAX_WORKER         uint64 = 0 // 最大消息工作协程
+	MAX_WORKER uint64 = 0 // 最大消息工作协程
 
 	tcpSessPool = utils.NewPool[tcpSess]()
 	wsSessPool  = utils.NewPool[wsSess]()
@@ -347,7 +346,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		msg.Sess = sess
 		msg.Data = rbuf
 
-		this_.getMessageWorker().Push(msg)
+		this_.messageWorkers[sess.SockFd()%int64(MAX_WORKER)].Push(msg)
 	}
 }
 
@@ -422,12 +421,8 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 		msg := messagePool.Get()
 		msg.Sess = sess
 		msg.Data = rbuf
-		this_.getMessageWorker().Push(msg)
+		this_.messageWorkers[sess.fd%int64(MAX_WORKER)].Push(msg)
 	}
-}
-
-func (this_ *IoServer) getMessageWorker() *utils.Worker[message] {
-	return this_.messageWorkers[atomic.AddUint64(&messageWorkerIndex, 1)%MAX_WORKER]
 }
 
 func (this_ *IoServer) messageProc(msg *message) {
