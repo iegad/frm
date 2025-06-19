@@ -9,8 +9,10 @@ import (
 	"github.com/gox/frm/utils"
 )
 
+const HOST = "127.0.0.1:9091"
+
 func main() {
-	c, err := nw.NewWsClient("127.0.0.1:9091", time.Minute, nil, nil)
+	c, err := nw.NewWsClient(HOST, time.Minute, nil, nil)
 	if err != nil {
 		log.Error(err)
 		return

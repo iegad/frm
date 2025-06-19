@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	N     = 1000
+	N     = 10000
 	NCONN = 10
+	// HOST  = "18.166.30.234:9090"
+	HOST = "127.0.0.1:9090"
 )
 
 var (
@@ -25,7 +27,7 @@ var (
 func testClient(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	c, err := nw.NewTcpClient("18.166.30.234:9090", 0, 0x12345678, nil, nil)
+	c, err := nw.NewTcpClient(HOST, 0, 0x12345678, nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

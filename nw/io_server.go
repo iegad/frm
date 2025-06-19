@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,8 +24,14 @@ var (
 		},
 	}
 
-	sessPool = utils.NewPool[tcpSess]()
+	sessPool    = utils.NewPool[tcpSess]()
+	messagePool = utils.NewPool[message]()
 )
+
+type message struct {
+	Sess ISess
+	Data []byte
+}
 
 // IO服务配置
 type IOSConfig struct {
@@ -43,18 +50,19 @@ func (this_ *IOSConfig) String() string {
 // IO服务
 //   - 可同时监听 TCP 和 Websocket 两种协议, 但需要不同的两个端口
 type IoServer struct {
-	maxConn      int32                         // 最大连接数
-	tcpHeadBlend uint32                        // TCP 消息头混合值
-	tcpAddr      *net.TCPAddr                  // TCP 监听 Endpoint
-	tcpListener  *net.TCPListener              // tcp listener
-	wsAddr       *net.TCPAddr                  // websocket 监听 Endpoint
-	wsListener   *net.TCPListener              // websocket listener
-	timeout      time.Duration                 // 客户端超时
-	service      IService                      // 服务实例
-	mtx          sync.Mutex                    // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
-	sessmap      *utils.SafeMap[string, ISess] // 会话集
-	wg           sync.WaitGroup                // 协程同步组
-	running      int32                         // 运行状态
+	maxConn        int32                         // 最大连接数
+	running        int32                         // 运行状态
+	tcpHeadBlend   uint32                        // TCP 消息头混合值
+	tcpAddr        *net.TCPAddr                  // TCP 监听 Endpoint
+	tcpListener    *net.TCPListener              // tcp listener
+	wsAddr         *net.TCPAddr                  // websocket 监听 Endpoint
+	wsListener     *net.TCPListener              // websocket listener
+	timeout        time.Duration                 // 客户端超时
+	service        IService                      // 服务实例
+	mtx            sync.Mutex                    // 开启与停止互斥锁. 开启服务和停止服务存在并发, 所以需要互斥
+	sessmap        *utils.SafeMap[string, ISess] // 会话集
+	wg             sync.WaitGroup                // 协程同步组
+	messageWorkers []*utils.Worker[message]      // 消息工作协程
 }
 
 // 创建io server 实例
@@ -151,6 +159,10 @@ func (this_ *IoServer) Stop() {
 		return
 	}
 
+	for _, worker := range this_.messageWorkers {
+		worker.Stop()
+	}
+
 	var err error
 
 	if this_.tcpListener != nil {
@@ -200,6 +212,19 @@ func (this_ *IoServer) run() error {
 
 	if !atomic.CompareAndSwapInt32(&this_.running, 0, 1) {
 		return nil
+	}
+
+	n := runtime.NumCPU()
+	this_.wg.Add(n)
+	for i := 0; i < n; i++ {
+		worker := utils.NewWorker(this_.messageProc)
+
+		go func(wg *sync.WaitGroup) {
+			worker.Run()
+			wg.Done()
+		}(&this_.wg)
+
+		this_.messageWorkers = append(this_.messageWorkers, worker)
 	}
 
 	var err error
@@ -287,8 +312,6 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		return
 	}
 
-	var rbuf []byte
-
 	defer func() {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
@@ -306,7 +329,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 	this_.sessmap.Set(sess.RemoteAddr().String(), sess)
 
 	for {
-		rbuf, err = sess.Read()
+		rbuf, err := sess.Read()
 		if err != nil {
 			if err == io.EOF || IsConnReset(err) {
 				log.Debug("TcpSess[%v] PASSIVE close", sess.RemoteAddr())
@@ -316,9 +339,11 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 			break
 		}
 
-		if !this_.service.OnData(sess, rbuf) {
-			break
-		}
+		msg := messagePool.Get()
+		msg.Sess = sess
+		msg.Data = rbuf
+
+		this_.getWorker().Push(msg)
 	}
 }
 
@@ -357,8 +382,6 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 		return
 	}
 
-	var rbuf []byte
-
 	defer func() {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
@@ -375,7 +398,7 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 	this_.sessmap.Set(sess.RemoteAddr().String(), sess)
 
 	for {
-		rbuf, err = sess.Read()
+		rbuf, err := sess.Read()
 		if err != nil {
 			if websocket.IsCloseError(err,
 				websocket.CloseAbnormalClosure,
@@ -389,8 +412,26 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 			break
 		}
 
-		if !this_.service.OnData(sess, rbuf) {
-			break
-		}
+		msg := messagePool.Get()
+		msg.Sess = sess
+		msg.Data = rbuf
+		this_.getWorker().Push(msg)
 	}
+}
+
+var idx uint64
+
+func (this_ *IoServer) getWorker() *utils.Worker[message] {
+	i := atomic.LoadUint64(&idx)
+	n := uint64(len(this_.messageWorkers))
+	wkr := this_.messageWorkers[i%n]
+	atomic.AddUint64(&idx, 1)
+	return wkr
+}
+
+func (this_ *IoServer) messageProc(msg *message) {
+	if !this_.service.OnData(msg.Sess, msg.Data) {
+		msg.Sess.Close()
+	}
+	messagePool.Put(msg)
 }

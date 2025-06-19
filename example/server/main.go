@@ -1,6 +1,10 @@
 package main
 
 import (
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/gox/frm/log"
 	"github.com/gox/frm/nw"
 )
@@ -38,7 +42,10 @@ func (this_ *EchoService) OnStopped(ios *nw.IoServer) {
 }
 
 func (this_ *EchoService) OnDecrypt(data []byte) ([]byte, error) {
-	return data, nil
+	n := len(data)
+	buf := make([]byte, n)
+	copy(buf, data)
+	return buf, nil
 }
 
 func (this_ *EchoService) OnEncrypt(data []byte) ([]byte, error) {
@@ -56,6 +63,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigCh
+		log.Debug("收到信号: %v", sig)
+		ios.Stop()
+	}()
 
 	err = ios.Run()
 	if err != nil {

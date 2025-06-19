@@ -5,11 +5,44 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gox/frm/log"
 )
+
+var (
+	hbufPool = sync.Pool{
+		New: func() any {
+			b := make([]byte, 4)
+			return &b
+		},
+	}
+
+	dbufPool = sync.Pool{
+		New: func() any {
+			b := make([]byte, TCP_MAX_SIZE)
+			return &b
+		},
+	}
+)
+
+func getHbuf() []byte {
+	return *(hbufPool.Get().(*[]byte))
+}
+
+func putHbuf(hbuf []byte) {
+	hbufPool.Put(&hbuf)
+}
+
+func getDbuf() []byte {
+	return *(dbufPool.Get().(*[]byte))
+}
+
+func putDbuf(rbuf []byte) {
+	dbufPool.Put(&rbuf)
+}
 
 // tcpSess
 //
@@ -25,8 +58,6 @@ type tcpSess struct {
 	reader    *bufio.Reader // 读缓冲区
 	realIP    string        // 真实IP
 	service   IService      // 服务实例
-	hbuf      []byte        // header buffer
-	dbuf      []byte        // data buffer
 	userData  any           // 用户数据
 }
 
@@ -61,14 +92,6 @@ func (this_ *tcpSess) init(conn *net.TCPConn, timeout time.Duration, blend uint3
 
 	if this_.service == nil {
 		this_.service = service
-	}
-
-	if len(this_.hbuf) == 0 {
-		this_.hbuf = make([]byte, TCP_HEADER_SIZE)
-	}
-
-	if len(this_.dbuf) == 0 {
-		this_.dbuf = make([]byte, TCP_MAX_SIZE)
 	}
 
 	if this_.userData != nil {
@@ -144,29 +167,35 @@ func (this_ *tcpSess) Read() ([]byte, error) {
 		}
 	}
 
-	_, err = io.ReadAtLeast(this_.reader, this_.hbuf, TCP_HEADER_SIZE)
+	hbuf := getHbuf()
+	defer putHbuf(hbuf)
+
+	_, err = io.ReadAtLeast(this_.reader, hbuf, TCP_HEADER_SIZE)
 	if err != nil {
 		return nil, err
 	}
 
-	buflen := binary.BigEndian.Uint32(this_.hbuf) ^ this_.blend
+	buflen := binary.BigEndian.Uint32(hbuf) ^ this_.blend
 	if buflen == 0 || buflen > TCP_MAX_SIZE {
 		return nil, ErrInvalidBufSize
 	}
 
-	_, err = io.ReadAtLeast(this_.reader, this_.dbuf, int(buflen))
+	dbuf := getDbuf()
+	defer putDbuf(dbuf)
+
+	_, err = io.ReadAtLeast(this_.reader, dbuf, int(buflen))
 	if err != nil {
 		return nil, err
 	}
 
-	dbuf, err := this_.OnDecrypt(this_.dbuf[:buflen])
+	data, err := this_.OnDecrypt(dbuf[:buflen])
 	if err != nil {
 		log.Error("TcpSess[%v] Decrypt error: %v", this_.RemoteAddr(), err)
 		return nil, err
 	}
 
 	this_.recvSeq++
-	return dbuf, nil
+	return data, nil
 }
 
 func (this_ *tcpSess) GetUserData() any {
