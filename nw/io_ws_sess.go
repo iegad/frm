@@ -2,6 +2,7 @@ package nw
 
 import (
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,15 +18,17 @@ type wsSess struct {
 	timeout   time.Duration
 	conn      *websocket.Conn
 	realIP    string
-	service   IService
+	ios       *IoServer
 	userData  any
+	wch       chan []byte
+	wg        sync.WaitGroup
 }
 
-func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp string, service IService) (*wsSess, error) {
+func (this_ *wsSess) init(conn *websocket.Conn, timeout time.Duration, realIp string, ios *IoServer) error {
 	rawConn, err := conn.NetConn().(*net.TCPConn).SyscallConn()
 	if err != nil {
 		log.Error(err)
-		return nil, err
+		return err
 	}
 
 	ch := make(chan int64, 1)
@@ -35,17 +38,25 @@ func newWsSess(conn *websocket.Conn, timeout time.Duration, realIp string, servi
 
 	fd := <-ch
 
-	return &wsSess{
-		connected: 1,
-		fd:        fd,
-		recvSeq:   0,
-		sendSeq:   0,
-		conn:      conn,
-		timeout:   timeout,
-		realIP:    realIp,
-		service:   service,
-		userData:  nil,
-	}, nil
+	this_.connected = 1
+	this_.fd = fd
+	this_.recvSeq = 0
+	this_.sendSeq = 0
+	this_.conn = conn
+	this_.timeout = timeout
+	this_.realIP = realIp
+	this_.ios = ios
+
+	if this_.userData != nil {
+		this_.userData = nil
+	}
+
+	this_.wch = make(chan []byte, MAX_CHAN_SIZE)
+
+	this_.wg.Add(1)
+	go this_.writeProc()
+
+	return nil
 }
 
 func (this_ *wsSess) IsConnected() bool {
@@ -76,13 +87,20 @@ func (this_ *wsSess) Close() error {
 		}
 
 		err = this_.conn.Close()
+		close(this_.wch)
+		this_.wch = nil
+		this_.wg.Wait()
 		return err
 	}
 
 	return nil
 }
 
-func (this_ *wsSess) Write(data []byte) (int, error) {
+func (this_ *wsSess) Write(data []byte) {
+	this_.wch <- data
+}
+
+func (this_ *wsSess) write(data []byte) (int, error) {
 	data, err := this_.OnEncrypt(data)
 	if err != nil {
 		log.Error("WsSess[%v] OnEncrypt failed: %v", this_.realIP, err)
@@ -143,9 +161,20 @@ func (this_ *wsSess) GetSendSeq() int64 {
 }
 
 func (this_ *wsSess) OnEncrypt(data []byte) ([]byte, error) {
-	return this_.service.OnEncrypt(data)
+	return this_.ios.service.OnEncrypt(data)
 }
 
 func (this_ *wsSess) OnDecrypt(data []byte) ([]byte, error) {
-	return this_.service.OnDecrypt(data)
+	return this_.ios.service.OnDecrypt(data)
+}
+
+func (this_ *wsSess) writeProc() {
+	for data := range this_.wch {
+		_, err := this_.write(data)
+		if err != nil {
+			log.Error("[%v]发送消息失败: %v", this_.RealRemoteIP(), err)
+		}
+	}
+
+	this_.wg.Done()
 }

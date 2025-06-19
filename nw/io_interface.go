@@ -63,7 +63,7 @@ type ISess interface {
 	Close() error
 
 	// 发送数据
-	Write(data []byte) (int, error)
+	Write(data []byte)
 
 	// 读取数据
 	Read() ([]byte, error)

@@ -24,7 +24,11 @@ var (
 		},
 	}
 
-	sessPool    = utils.NewPool[tcpSess]()
+	messageWorkerIndex uint64 = 0 // 消息工作协程索引
+	MAX_WORKER         uint64 = 0 // 最大消息工作协程
+
+	tcpSessPool = utils.NewPool[tcpSess]()
+	wsSessPool  = utils.NewPool[wsSess]()
 	messagePool = utils.NewPool[message]()
 )
 
@@ -162,6 +166,7 @@ func (this_ *IoServer) Stop() {
 	for _, worker := range this_.messageWorkers {
 		worker.Stop()
 	}
+	this_.messageWorkers = []*utils.Worker[message]{}
 
 	var err error
 
@@ -214,17 +219,16 @@ func (this_ *IoServer) run() error {
 		return nil
 	}
 
-	n := runtime.NumCPU()
-	this_.wg.Add(n)
-	for i := 0; i < n; i++ {
-		worker := utils.NewWorker(this_.messageProc)
+	this_.wg.Add(int(MAX_WORKER))
+	for i := uint64(0); i < MAX_WORKER; i++ {
+		mw := utils.NewWorker(this_.messageProc)
 
 		go func(wg *sync.WaitGroup) {
-			worker.Run()
+			mw.Run()
 			wg.Done()
 		}(&this_.wg)
 
-		this_.messageWorkers = append(this_.messageWorkers, worker)
+		this_.messageWorkers = append(this_.messageWorkers, mw)
 	}
 
 	var err error
@@ -304,8 +308,8 @@ func (this_ *IoServer) tcpRun(wg *sync.WaitGroup) {
 
 // tcp conn 句柄
 func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
-	sess := sessPool.Get()
-	err := sess.init(conn, this_.timeout, this_.tcpHeadBlend, this_.service)
+	sess := tcpSessPool.Get()
+	err := sess.init(conn, this_.timeout, this_.tcpHeadBlend, this_)
 	if err != nil {
 		log.Error(err)
 		conn.Close()
@@ -316,7 +320,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
 		this_.service.OnDisconnected(sess)
-		sessPool.Put(sess)
+		tcpSessPool.Put(sess)
 		wg.Done()
 	}()
 
@@ -343,7 +347,7 @@ func (this_ *IoServer) tcpConnHandle(conn *net.TCPConn, wg *sync.WaitGroup) {
 		msg.Sess = sess
 		msg.Data = rbuf
 
-		this_.getWorker().Push(msg)
+		this_.getMessageWorker().Push(msg)
 	}
 }
 
@@ -375,7 +379,9 @@ func (this_ *IoServer) wsUpgrade(w http.ResponseWriter, r *http.Request) {
 
 // websocket conn 句柄
 func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, realIP string) {
-	sess, err := newWsSess(conn, this_.timeout, realIP, this_.service)
+	sess := wsSessPool.Get()
+
+	err := sess.init(conn, this_.timeout, realIP, this_)
 	if err != nil {
 		log.Error(err)
 		conn.Close()
@@ -386,6 +392,7 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 		this_.sessmap.Remove(sess.RemoteAddr().String())
 		sess.Close()
 		this_.service.OnDisconnected(sess)
+		wsSessPool.Put(sess)
 		wg.Done()
 	}()
 
@@ -415,18 +422,12 @@ func (this_ *IoServer) wsConnHandle(conn *websocket.Conn, wg *sync.WaitGroup, re
 		msg := messagePool.Get()
 		msg.Sess = sess
 		msg.Data = rbuf
-		this_.getWorker().Push(msg)
+		this_.getMessageWorker().Push(msg)
 	}
 }
 
-var idx uint64
-
-func (this_ *IoServer) getWorker() *utils.Worker[message] {
-	i := atomic.LoadUint64(&idx)
-	n := uint64(len(this_.messageWorkers))
-	wkr := this_.messageWorkers[i%n]
-	atomic.AddUint64(&idx, 1)
-	return wkr
+func (this_ *IoServer) getMessageWorker() *utils.Worker[message] {
+	return this_.messageWorkers[atomic.AddUint64(&messageWorkerIndex, 1)%MAX_WORKER]
 }
 
 func (this_ *IoServer) messageProc(msg *message) {
@@ -434,4 +435,8 @@ func (this_ *IoServer) messageProc(msg *message) {
 		msg.Sess.Close()
 	}
 	messagePool.Put(msg)
+}
+
+func init() {
+	MAX_WORKER = uint64(runtime.NumCPU())
 }

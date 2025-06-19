@@ -57,13 +57,15 @@ type tcpSess struct {
 	conn      *net.TCPConn  // 连接对象
 	reader    *bufio.Reader // 读缓冲区
 	realIP    string        // 真实IP
-	service   IService      // 服务实例
+	ios       *IoServer     // 服务实例
 	userData  any           // 用户数据
+	wch       chan []byte   // 发送管道
+	wg        sync.WaitGroup
 }
 
 // 创建新的TCP会话
 //   - 该方法只会返回一种错误, 即 获取原始文件描述符失败
-func (this_ *tcpSess) init(conn *net.TCPConn, timeout time.Duration, blend uint32, service IService) error {
+func (this_ *tcpSess) init(conn *net.TCPConn, timeout time.Duration, blend uint32, ios *IoServer) error {
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
 		return err
@@ -89,14 +91,16 @@ func (this_ *tcpSess) init(conn *net.TCPConn, timeout time.Duration, blend uint3
 	this_.conn = conn
 	this_.reader = bufio.NewReader(conn)
 	this_.realIP = conn.RemoteAddr().(*net.TCPAddr).IP.String()
-
-	if this_.service == nil {
-		this_.service = service
-	}
+	this_.ios = ios
 
 	if this_.userData != nil {
 		this_.userData = nil
 	}
+
+	this_.wch = make(chan []byte, MAX_CHAN_SIZE)
+
+	this_.wg.Add(1)
+	go this_.writeProc()
 
 	return nil
 }
@@ -123,13 +127,22 @@ func (this_ *tcpSess) RealRemoteIP() string {
 
 func (this_ *tcpSess) Close() error {
 	if atomic.CompareAndSwapInt32(&this_.connected, 1, 0) {
-		return this_.conn.Close()
+		err := this_.conn.Close()
+		close(this_.wch)
+		this_.wch = nil
+
+		this_.wg.Wait()
+		return err
 	}
 
 	return nil
 }
 
-func (this_ *tcpSess) Write(data []byte) (int, error) {
+func (this_ *tcpSess) Write(data []byte) {
+	this_.wch <- data
+}
+
+func (this_ *tcpSess) write(data []byte) (int, error) {
 	if len(data) > TCP_MAX_SIZE {
 		log.Error("TcpSess[%v] Write data size[%d] exceeds max size[%d]", this_.RemoteAddr(), len(data), TCP_MAX_SIZE)
 		return -1, ErrInvalidBufSize
@@ -215,9 +228,20 @@ func (this_ *tcpSess) GetSendSeq() int64 {
 }
 
 func (this_ *tcpSess) OnEncrypt(data []byte) ([]byte, error) {
-	return this_.service.OnEncrypt(data)
+	return this_.ios.service.OnEncrypt(data)
 }
 
 func (this_ *tcpSess) OnDecrypt(data []byte) ([]byte, error) {
-	return this_.service.OnDecrypt(data)
+	return this_.ios.service.OnDecrypt(data)
+}
+
+func (this_ *tcpSess) writeProc() {
+	for data := range this_.wch {
+		_, err := this_.write(data)
+		if err != nil {
+			log.Error("[%v]发送消息失败: %v", this_.RealRemoteIP(), err)
+		}
+	}
+
+	this_.wg.Done()
 }

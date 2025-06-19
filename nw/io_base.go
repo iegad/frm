@@ -15,6 +15,7 @@ import (
 const (
 	TCP_HEADER_SIZE = int(unsafe.Sizeof(uint32(0)))
 	TCP_MAX_SIZE    = 1024 * 1024 * 2
+	MAX_CHAN_SIZE   = 100000
 )
 
 var errDataTooLong = errors.New("data too long")
