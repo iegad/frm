@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gox/frm/log"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
@@ -19,6 +18,9 @@ type ServerState int32
 const (
 	ServerState_Stopped ServerState = 0
 	ServerState_Running ServerState = 1
+
+	RECV_BUF_SIZE = 1024 * 1024 * 2
+	SEND_BUF_SIZE = 1024 * 1024 * 2
 )
 
 var (
@@ -112,10 +114,7 @@ func (this_ *Server) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 		return nil, gnet.Close
 	}
 
-	r, _ := GetSockRecvBuffer(c)
-	s, _ := GetSockSendBuffer(c)
-
-	logging.Infof("[%d:%v] has connected, rbuf_size: %d, wbuf_size: %d", c.Fd(), c.RemoteAddr(), r, s)
+	logging.Debugf("[%d:%v] has connected", c.Fd(), c.RemoteAddr())
 
 	// TODO 连接事件
 	return nil, gnet.None
@@ -124,7 +123,7 @@ func (this_ *Server) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 func (this_ *Server) OnClose(c gnet.Conn, err error) gnet.Action {
 	// TODO: 连接断开事件
 
-	logging.Infof("[%v] has disconnected", c.RemoteAddr())
+	logging.Debugf("[%d:%v] has disconnected", c.Fd(), c.RemoteAddr())
 	return gnet.None
 }
 
@@ -166,12 +165,13 @@ func (this_ *Server) Run() error {
 		gnet.WithMulticore(true),
 		gnet.WithReuseAddr(true),
 		gnet.WithReusePort(true),
-		gnet.WithSocketSendBuffer(1024*1024*10),
-		gnet.WithSocketRecvBuffer(1024*1024*10),
+		gnet.WithSocketSendBuffer(RECV_BUF_SIZE),
+		gnet.WithSocketRecvBuffer(SEND_BUF_SIZE),
+		gnet.WithLogLevel(logging.DebugLevel),
 	)
 
 	if err != nil {
-		log.Error(err)
+		logging.Errorf("run failed: %v", err)
 		return err
 	}
 

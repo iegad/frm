@@ -1,0 +1,1 @@
+SET CGO_ENABLED=0&&SET GOOS=linux&&SET GOARCH=amd64&& go build -ldflags="-w -s" -tags=poll_opt,gc_opt -o server main.go

@@ -1,17 +1,15 @@
-//go:build windows
+//go:build unix
 
 package io
 
 import (
-	"syscall"
-
 	"github.com/panjf2000/gnet/v2"
+	"golang.org/x/sys/unix"
 )
 
 func GetSockRecvBuffer(c gnet.Conn) (int, error) {
-	fd := syscall.Handle(c.Fd())
-
-	size, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+	fd := c.Fd()
+	size, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_RCVBUF)
 	if err != nil {
 		return -1, err
 	}
@@ -20,9 +18,9 @@ func GetSockRecvBuffer(c gnet.Conn) (int, error) {
 }
 
 func GetSockSendBuffer(c gnet.Conn) (int, error) {
-	fd := syscall.Handle(c.Fd())
+	fd := c.Fd()
 
-	size, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF)
+	size, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_SNDBUF)
 	if err != nil {
 		return -1, err
 	}
