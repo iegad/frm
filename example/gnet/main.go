@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/gox/frm/io"
@@ -10,14 +11,12 @@ import (
 )
 
 func main() {
-	server, err := io.NewServer(&io.Config{
-		TcpAddress: ":9090",
-		MaxConn:    10000,
-		HeadBlend:  0x01020304,
+	server := io.NewServer(&io.Config{
+		TcpHost:   ":9090",
+		WsHost:    ":9091",
+		MaxConn:   10000,
+		HeadBlend: 0x01020304,
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -28,5 +27,5 @@ func main() {
 		server.Stop()
 	}()
 
-	server.Run()
+	server.Run(runtime.NumCPU())
 }
