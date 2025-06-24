@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/gobwas/ws"
@@ -14,7 +15,9 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
-var wsBufPool = utils.NewPool[bytes.Buffer]()
+var (
+	wsWbufPool = utils.NewPool[bytes.Buffer]()
+)
 
 type wsServer struct {
 	gnet.BuiltinEventEngine
@@ -97,13 +100,7 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	buf, err := c.Next(-1)
-	if err != nil {
-		log.Error("[%d:%v] read failed: %v", c.Fd(), c.RemoteAddr(), err)
-		return gnet.Close
-	}
-
-	data, err := wsutil.ReadClientText(bytes.NewBuffer(buf))
+	data, err := wsutil.ReadClientText(c)
 	if err != nil {
 		log.Error("read failed: %v", err)
 		return gnet.Close
@@ -121,6 +118,7 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 func (this_ *wsServer) Run() error {
 	return gnet.Run(this_, this_.host,
 		gnet.WithMulticore(true),
+		gnet.WithNumEventLoop(runtime.NumCPU()*2),
 		gnet.WithReuseAddr(true),
 		gnet.WithReusePort(true),
 		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
@@ -135,13 +133,18 @@ func (this_ *wsServer) Stop() {
 }
 
 func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
-	buf := wsBufPool.Get()
+	buf := wsWbufPool.Get()
 	err := wsutil.WriteServerMessage(buf, ws.OpText, data)
 	if err != nil {
 		return nil
 	}
 	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
-		wsBufPool.Put(buf)
+		if err != nil {
+			log.Error("AsyncWrite failed: %v", err)
+		}
+
+		buf.Reset()
+		wsWbufPool.Put(buf)
 		return nil
 	})
 }

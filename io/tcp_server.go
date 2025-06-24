@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/gox/frm/log"
@@ -111,6 +112,7 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 func (this_ *tcpServer) Run() error {
 	return gnet.Run(this_, this_.host,
 		gnet.WithMulticore(true),
+		gnet.WithNumEventLoop(runtime.NumCPU()*2),
 		gnet.WithReuseAddr(true),
 		gnet.WithReusePort(true),
 		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
@@ -133,6 +135,10 @@ func (this_ *tcpServer) Write(c *ConnContext, data []byte) error {
 	buf.Write(data)
 
 	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
+		if err != nil {
+			log.Error("AsyncWrite failed: %v", err)
+		}
+
 		tcpBufPool.Put(buf)
 		return nil
 	})
