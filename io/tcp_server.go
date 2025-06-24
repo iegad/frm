@@ -178,7 +178,7 @@ func (this_ *tcpServer) writeProc(wg *sync.WaitGroup) {
 func (this_ *tcpServer) Write(c *Conn, data []byte) error {
 	dlen := len(data)
 	buf := getWbuf(dlen + TCP_HEADER_SIZE)
-	binary.BigEndian.PutUint32(buf[:TCP_HEADER_SIZE], uint32(dlen))
+	binary.BigEndian.PutUint32(buf[:TCP_HEADER_SIZE], uint32(dlen)^this_.headBlend)
 	copy(buf[TCP_HEADER_SIZE:], data)
 	msg := messagePool.Get()
 	msg.Conn = c

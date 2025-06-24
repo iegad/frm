@@ -31,7 +31,7 @@ func (this_ *echoHandler) OnStopped(s *io.Service) {
 }
 
 func (this_ *echoHandler) OnData(c *io.Conn, data []byte) error {
-	return c.AsyncWrite(data, nil)
+	return c.Write(data)
 }
 
 func main() {
