@@ -7,16 +7,26 @@ import (
 	"sync/atomic"
 
 	"github.com/gox/frm/log"
+	"github.com/panjf2000/gnet/v2"
 )
 
+// 常量定义
 const (
-	ServerState_Stopped  ServerState = 0
-	ServerState_Stopping ServerState = 1
-	ServerState_Running  ServerState = 2
+	ServerState_Stopped  ServerState = 0 // 服务器状态: 停止
+	ServerState_Stopping ServerState = 1 // 服务器状态: 正在停止中
+	ServerState_Running  ServerState = 2 // 服务器状态: 运行
 
 	RECV_BUF_SIZE = 1024 * 1024 * 2
 	SEND_BUF_SIZE = 1024 * 1024 * 2
 )
+
+type IServerEvent interface {
+	OnInit(*Server) error
+	OnConnected(gnet.Conn) error
+	OnDisconnected(gnet.Conn)
+	OnStopped(*Server)
+	OnData(gnet.Conn, []byte) error
+}
 
 type Config struct {
 	TcpHost   string `json:"tcp_host,omitempty"`
@@ -46,10 +56,11 @@ type Server struct {
 	wsSvr     *wsServer
 	messageCh chan *message
 	info      *serverInfo
+	event     IServerEvent
 	wg        sync.WaitGroup
 }
 
-func NewServer(c *Config) *Server {
+func NewServer(c *Config, event IServerEvent) *Server {
 	messageCh := make(chan *message, c.MaxConn*100)
 
 	this_ := &Server{
@@ -60,6 +71,7 @@ func NewServer(c *Config) *Server {
 			TcpHost: c.TcpHost,
 			WsHost:  c.WsHost,
 		},
+		event: event,
 	}
 
 	if len(c.TcpHost) > 0 {
@@ -76,6 +88,11 @@ func NewServer(c *Config) *Server {
 func (this_ *Server) Run(nproc int) {
 	if !atomic.CompareAndSwapInt32((*int32)(&this_.state), int32(ServerState_Stopped), int32(ServerState_Running)) {
 		return
+	}
+
+	err := this_.event.OnInit(this_)
+	if err != nil {
+		log.Fatal("server inited failed: %v", err)
 	}
 
 	if nproc <= 0 {
@@ -111,6 +128,7 @@ func (this_ *Server) Run(nproc int) {
 
 	this_.wg.Wait()
 	this_.state = ServerState_Stopped
+	this_.event.OnStopped(this_)
 }
 
 func (this_ *Server) Stop() {
@@ -147,5 +165,8 @@ func (this_ *Server) messageProc(wg *sync.WaitGroup) {
 }
 
 func (this_ *Server) messageHandle(msg *message) {
-	// TODO
+	err := this_.event.OnData(msg.Conn, msg.Data)
+	if err != nil {
+		msg.Conn.Close()
+	}
 }
