@@ -17,12 +17,12 @@ func (this_ *echoHandler) OnInit(s *io.Service) error {
 	return nil
 }
 
-func (this_ *echoHandler) OnConnected(c *io.Conn) error {
+func (this_ *echoHandler) OnConnected(c *io.ConnContext) error {
 	log.Debug("[%d:%s] has connected", c.Fd(), c.RemoteAddr())
 	return nil
 }
 
-func (this_ *echoHandler) OnDisconnected(c *io.Conn) {
+func (this_ *echoHandler) OnDisconnected(c *io.ConnContext) {
 	log.Debug("[%d:%s] has disconnected", c.Fd(), c.RemoteAddr())
 }
 
@@ -30,7 +30,7 @@ func (this_ *echoHandler) OnStopped(s *io.Service) {
 	log.Debug("server has stopped...")
 }
 
-func (this_ *echoHandler) OnData(c *io.Conn, data []byte) error {
+func (this_ *echoHandler) OnData(c *io.ConnContext, data []byte) error {
 	return c.Write(data)
 }
 

@@ -1,41 +1,19 @@
 package io
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
-	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/gox/frm/log"
+	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
-var (
-	wbufPool = sync.Pool{
-		New: func() any {
-			b := make([]byte, 4096)
-			return &b
-		},
-	}
-)
-
-func getWbuf(n int) []byte {
-	bufPtr := wbufPool.Get().(*[]byte)
-	buf := *bufPtr
-	if len(buf) < n {
-		buf = make([]byte, n)
-	}
-	return buf
-}
-
-func putWbuf(buf []byte) {
-	if buf != nil {
-		wbufPool.Put(&buf)
-	}
-}
+var tcpBufPool = utils.NewPool[bytes.Buffer]()
 
 type tcpServer struct {
 	gnet.BuiltinEventEngine
@@ -44,7 +22,6 @@ type tcpServer struct {
 	headBlend uint32
 	owner     *Service
 	host      string
-	writeCh   chan *message
 }
 
 func newTcpServer(owner *Service, c *Config) *tcpServer {
@@ -69,27 +46,28 @@ func (this_ *tcpServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 		return nil, gnet.Close
 	}
 
-	atomic.AddInt32(&this_.owner.currConn, 1)
+	cctx := getConnContext()
+	cctx.Init(c, this_, "", "")
 
-	conn := getConn()
-	conn.Init(c, this_, "", "")
-
-	if err := this_.owner.event.OnConnected(conn); err != nil {
+	if err := this_.owner.event.OnConnected(cctx); err != nil {
 		log.Error("[%d:%v] connected failed: %v", err)
-		putConn(conn)
+		putConnContext(cctx)
 		return nil, gnet.Close
 	}
 
-	c.SetContext(conn)
+	atomic.AddInt32(&this_.owner.currConn, 1)
+	c.SetContext(cctx)
+	cctx.upgraded = true
 	return nil, gnet.None
 }
 
 func (this_ *tcpServer) OnClose(c gnet.Conn, err error) gnet.Action {
 	atomic.AddInt32(&this_.owner.currConn, -1)
 
-	conn := c.Context().(*Conn)
-	this_.owner.event.OnDisconnected(conn)
-	putConn(conn)
+	cctx := c.Context().(*ConnContext)
+	this_.owner.event.OnDisconnected(cctx)
+
+	putConnContext(cctx)
 	c.SetContext(nil)
 	return gnet.None
 }
@@ -123,7 +101,7 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 
 	msg := messagePool.Get()
-	msg.Conn = c.Context().(*Conn)
+	msg.Conn = c.Context().(*ConnContext)
 	msg.Data = data[TCP_HEADER_SIZE:]
 	this_.owner.messageCh <- msg
 
@@ -131,14 +109,6 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 }
 
 func (this_ *tcpServer) Run() error {
-	this_.writeCh = make(chan *message, this_.owner.maxConn*100)
-
-	n := runtime.NumCPU()
-	this_.owner.wg.Add(n)
-	for i := 0; i < n; i++ {
-		go this_.writeProc(&this_.owner.wg)
-	}
-
 	return gnet.Run(this_, this_.host,
 		gnet.WithMulticore(true),
 		gnet.WithReuseAddr(true),
@@ -151,38 +121,19 @@ func (this_ *tcpServer) Run() error {
 }
 
 func (this_ *tcpServer) Stop() {
-	close(this_.writeCh)
 	this_.eng.Stop(context.TODO())
 }
 
-func (this_ *tcpServer) writeProc(wg *sync.WaitGroup) {
-	var (
-		err     error
-		running = int32(ServiceState_Running)
-		state   = (*int32)(&this_.owner.state)
-	)
-
-	for msg := range this_.writeCh {
-		if atomic.LoadInt32(state) == running {
-			_, err = msg.Conn.Conn.Write(msg.Data)
-			if err != nil {
-				log.Error("[%v] write failed: %v", err)
-			}
-			putWbuf(msg.Data)
-		}
-		messagePool.Put(msg)
-	}
-	wg.Done()
-}
-
-func (this_ *tcpServer) Write(c *Conn, data []byte) error {
+func (this_ *tcpServer) Write(c *ConnContext, data []byte) error {
+	buf := tcpBufPool.Get()
 	dlen := len(data)
-	buf := getWbuf(dlen + TCP_HEADER_SIZE)
-	binary.BigEndian.PutUint32(buf[:TCP_HEADER_SIZE], uint32(dlen)^this_.headBlend)
-	copy(buf[TCP_HEADER_SIZE:], data)
-	msg := messagePool.Get()
-	msg.Conn = c
-	msg.Data = buf
-	this_.writeCh <- msg
-	return nil
+	header := uint32(dlen) ^ this_.headBlend
+	_ = binary.Write(buf, binary.BigEndian, header)
+
+	buf.Write(data)
+
+	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
+		tcpBufPool.Put(buf)
+		return nil
+	})
 }

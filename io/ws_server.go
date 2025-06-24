@@ -1,25 +1,27 @@
 package io
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/gox/frm/log"
+	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
+var wsBufPool = utils.NewPool[bytes.Buffer]()
+
 type wsServer struct {
 	gnet.BuiltinEventEngine
-	eng     gnet.Engine
-	owner   *Service
-	host    string
-	writeCh chan *message
+	eng gnet.Engine
+
+	owner *Service
+	host  string
 }
 
 func newWsServer(owner *Service, c *Config) *wsServer {
@@ -29,6 +31,10 @@ func newWsServer(owner *Service, c *Config) *wsServer {
 	}
 
 	return this_
+}
+
+func (this_ *wsServer) Proto() Protocol {
+	return Protocol_Websocket
 }
 
 func (this_ *wsServer) OnBoot(eng gnet.Engine) gnet.Action {
@@ -41,63 +47,78 @@ func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 		return nil, gnet.Close
 	}
 
+	cctx := getConnContext()
+	cctx.Init(c, this_, "", "")
+
+	if err := this_.owner.event.OnConnected(cctx); err != nil {
+		log.Error("[%d:%v] connected failed: %v", err)
+		putConnContext(cctx)
+		return nil, gnet.Close
+	}
+
 	atomic.AddInt32(&this_.owner.currConn, 1)
+	c.SetContext(cctx)
 	return nil, gnet.None
 }
 
 func (this_ *wsServer) OnClose(c gnet.Conn, err error) gnet.Action {
-	// TODO: 连接断开事件
-
 	atomic.AddInt32(&this_.owner.currConn, -1)
-	logging.Debugf("[%d:%v] has disconnected", c.Fd(), c.RemoteAddr())
+
+	cctx := c.Context().(*ConnContext)
+	this_.owner.event.OnDisconnected(cctx)
+
+	putConnContext(cctx)
+	c.SetContext(nil)
 	return gnet.None
 }
 
 func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
-	data, err := c.Next(-1)
-	if err != nil {
-		logging.Errorf("[%v] read failed: %v", c.RemoteAddr(), err)
-		return gnet.Close
-	}
+	cctx := c.Context().(*ConnContext)
 
-	if data == nil {
-		return gnet.None
-	}
+	if !cctx.upgraded {
+		u := ws.Upgrader{
+			OnHeader: func(key, value []byte) error {
+				log.Debug("Key: %v, Value: %v", string(key), string(value))
+				return nil
+			},
+			OnRequest: func(uri []byte) error {
+				log.Debug("URI: %s", string(uri))
+				return nil
+			},
+		}
 
-	if _, upgraded := c.Context().(bool); !upgraded {
-		_, err = ws.Upgrade(c)
+		_, err := u.Upgrade(c)
 		if err != nil {
-			log.Error("ws upgrade failed: %v", err)
+			log.Error("upgrade failed: %v", err)
 			return gnet.Close
 		}
 
-		c.SetContext(true)
+		cctx.upgraded = true
 		return gnet.None
 	}
 
-	data, err = wsutil.ReadClientBinary(c)
+	buf, err := c.Next(-1)
+	if err != nil {
+		log.Error("[%d:%v] read failed: %v", c.Fd(), c.RemoteAddr(), err)
+		return gnet.Close
+	}
+
+	data, err := wsutil.ReadClientText(bytes.NewBuffer(buf))
 	if err != nil {
 		log.Error("read failed: %v", err)
 		return gnet.Close
 	}
 
 	msg := messagePool.Get()
-	msg.Conn = c.Context().(*Conn)
+	msg.Conn = cctx
 	msg.Data = data
 
 	this_.owner.messageCh <- msg
+
 	return gnet.None
 }
 
 func (this_ *wsServer) Run() error {
-	this_.writeCh = make(chan *message, this_.owner.maxConn*100)
-
-	n := runtime.NumCPU()
-	this_.owner.wg.Add(n)
-	for i := 0; i < n; i++ {
-		go this_.writeProc(&this_.owner.wg)
-	}
-
 	return gnet.Run(this_, this_.host,
 		gnet.WithMulticore(true),
 		gnet.WithReuseAddr(true),
@@ -110,34 +131,17 @@ func (this_ *wsServer) Run() error {
 }
 
 func (this_ *wsServer) Stop() {
-	close(this_.writeCh)
 	this_.eng.Stop(context.TODO())
 }
 
-func (this_ *wsServer) writeProc(wg *sync.WaitGroup) {
-	var (
-		err     error
-		running = int32(ServiceState_Running)
-		state   = (*int32)(&this_.owner.state)
-	)
-
-	for msg := range this_.writeCh {
-		if atomic.LoadInt32(state) == running {
-			err = wsutil.WriteServerBinary(msg.Conn.Conn, msg.Data)
-			if err != nil {
-				log.Error("[%v] write failed: %v", err)
-			}
-		}
-		messagePool.Put(msg)
+func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
+	buf := wsBufPool.Get()
+	err := wsutil.WriteServerMessage(buf, ws.OpText, data)
+	if err != nil {
+		return nil
 	}
-	wg.Done()
-}
-
-func (this_ *wsServer) Write(c *Conn, data []byte) error {
-	msg := messagePool.Get()
-	msg.Conn = c
-	msg.Data = data
-
-	this_.writeCh <- msg
-	return nil
+	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
+		wsBufPool.Put(buf)
+		return nil
+	})
 }

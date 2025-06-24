@@ -5,7 +5,7 @@ import (
 )
 
 type message struct {
-	Conn  *Conn
+	Conn  *ConnContext
 	Data  []byte
 	Error error
 }

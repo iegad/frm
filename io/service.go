@@ -63,16 +63,16 @@ const (
 
 type iServer interface {
 	Proto() Protocol
-	Write(*Conn, []byte) error
+	Write(*ConnContext, []byte) error
 	Run() error
 }
 
 type IServiceEvent interface {
 	OnInit(*Service) error
-	OnConnected(*Conn) error
-	OnDisconnected(*Conn)
+	OnConnected(*ConnContext) error
+	OnDisconnected(*ConnContext)
 	OnStopped(*Service)
-	OnData(*Conn, []byte) error
+	OnData(*ConnContext, []byte) error
 }
 
 type Config struct {
