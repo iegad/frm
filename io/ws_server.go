@@ -16,15 +16,13 @@ import (
 
 type wsServer struct {
 	gnet.BuiltinEventEngine
-	eng gnet.Engine
-
-	owner *Server
-	host  string
-
+	eng     gnet.Engine
+	owner   *Service
+	host    string
 	writeCh chan *message
 }
 
-func newWsServer(owner *Server, c *Config) *wsServer {
+func newWsServer(owner *Service, c *Config) *wsServer {
 	this_ := &wsServer{
 		owner: owner,
 		host:  fmt.Sprintf("tcp://%s", c.WsHost),
@@ -35,20 +33,15 @@ func newWsServer(owner *Server, c *Config) *wsServer {
 
 func (this_ *wsServer) OnBoot(eng gnet.Engine) gnet.Action {
 	this_.eng = eng
-
-	// TODO: 初始化事件
 	return gnet.None
 }
 
 func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
-	if atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.maxConn {
+	if this_.owner.maxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.maxConn {
 		return nil, gnet.Close
 	}
 
 	atomic.AddInt32(&this_.owner.currConn, 1)
-	logging.Debugf("[%d:%v] has connected", c.Fd(), c.RemoteAddr())
-
-	// TODO 连接事件
 	return nil, gnet.None
 }
 
@@ -88,11 +81,11 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.Close
 	}
 
-	this_.owner.messageCh <- &message{
-		Conn: c,
-		Data: data,
-	}
+	msg := messagePool.Get()
+	msg.Conn = c.Context().(*Conn)
+	msg.Data = data
 
+	this_.owner.messageCh <- msg
 	return gnet.None
 }
 
@@ -109,6 +102,7 @@ func (this_ *wsServer) Run() error {
 		gnet.WithMulticore(true),
 		gnet.WithReuseAddr(true),
 		gnet.WithReusePort(true),
+		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
 		gnet.WithSocketSendBuffer(RECV_BUF_SIZE),
 		gnet.WithSocketRecvBuffer(SEND_BUF_SIZE),
 		gnet.WithLogLevel(logging.DebugLevel),
@@ -120,25 +114,16 @@ func (this_ *wsServer) Stop() {
 	this_.eng.Stop(context.TODO())
 }
 
-func (this_ *wsServer) Write(c gnet.Conn, data []byte) error {
-	msg := messagePool.Get()
-	msg.Conn = c
-	msg.Data = data
-
-	this_.writeCh <- msg
-	return nil
-}
-
 func (this_ *wsServer) writeProc(wg *sync.WaitGroup) {
 	var (
 		err     error
-		running = int32(ServerState_Running)
+		running = int32(ServiceState_Running)
 		state   = (*int32)(&this_.owner.state)
 	)
 
 	for msg := range this_.writeCh {
 		if atomic.LoadInt32(state) == running {
-			err = wsutil.WriteServerBinary(msg.Conn, msg.Data)
+			err = wsutil.WriteServerBinary(msg.Conn.Conn, msg.Data)
 			if err != nil {
 				log.Error("[%v] write failed: %v", err)
 			}
@@ -146,4 +131,13 @@ func (this_ *wsServer) writeProc(wg *sync.WaitGroup) {
 		messagePool.Put(msg)
 	}
 	wg.Done()
+}
+
+func (this_ *wsServer) Write(c *Conn, data []byte) error {
+	msg := messagePool.Get()
+	msg.Conn = c
+	msg.Data = data
+
+	this_.writeCh <- msg
+	return nil
 }

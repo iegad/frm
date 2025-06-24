@@ -8,35 +8,34 @@ import (
 
 	"github.com/gox/frm/io"
 	"github.com/gox/frm/log"
-	"github.com/panjf2000/gnet/v2"
 )
 
 type echoHandler struct{}
 
-func (this_ *echoHandler) OnInit(s *io.Server) error {
+func (this_ *echoHandler) OnInit(s *io.Service) error {
 	log.Debug("server is running...")
 	return nil
 }
 
-func (this_ *echoHandler) OnConnected(c gnet.Conn) error {
+func (this_ *echoHandler) OnConnected(c *io.Conn) error {
 	log.Debug("[%d:%s] has connected", c.Fd(), c.RemoteAddr())
 	return nil
 }
 
-func (this_ *echoHandler) OnDisconnected(c gnet.Conn) {
+func (this_ *echoHandler) OnDisconnected(c *io.Conn) {
 	log.Debug("[%d:%s] has disconnected", c.Fd(), c.RemoteAddr())
 }
 
-func (this_ *echoHandler) OnStopped(s *io.Server) {
+func (this_ *echoHandler) OnStopped(s *io.Service) {
 	log.Debug("server has stopped...")
 }
 
-func (this_ *echoHandler) OnData(c gnet.Conn, data []byte) error {
+func (this_ *echoHandler) OnData(c *io.Conn, data []byte) error {
 	return c.AsyncWrite(data, nil)
 }
 
 func main() {
-	server := io.NewServer(&io.Config{
+	server := io.NewService(&io.Config{
 		TcpHost:   ":9090",
 		WsHost:    ":9091",
 		MaxConn:   10000,
