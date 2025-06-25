@@ -19,17 +19,18 @@ type tcpServer struct {
 	eng gnet.Engine
 
 	headBlend uint32
-	wbufPool  *BufferPool
 	owner     *Service
-	conns     *utils.SafeMap[int, *ConnContext]
-	host      string
+	wbufPool  *BufferPool
+
+	conns *utils.SafeMap[int, *ConnContext]
+	host  string
 }
 
 func newTcpServer(owner *Service, c *Config) *tcpServer {
 	return &tcpServer{
 		headBlend: c.HeadBlend,
-		wbufPool:  NewBufferPool(),
 		owner:     owner,
+		wbufPool:  NewBufferPool(),
 		conns:     utils.NewSafeMap[int, *ConnContext](),
 		host:      fmt.Sprintf("tcp://%v", c.TcpHost),
 	}

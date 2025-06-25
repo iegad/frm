@@ -1,9 +1,7 @@
 package io
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -18,24 +16,22 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
-var (
-	wsWbufPool = utils.NewPool[bytes.Buffer]()
-)
-
 type wsServer struct {
 	gnet.BuiltinEventEngine
 	eng gnet.Engine
 
-	owner *Service
-	conns *utils.SafeMap[int, *ConnContext]
-	host  string
+	owner    *Service
+	wbufPool *BufferPool
+	conns    *utils.SafeMap[int, *ConnContext]
+	host     string
 }
 
 func newWsServer(owner *Service, c *Config) *wsServer {
 	this_ := &wsServer{
-		owner: owner,
-		conns: utils.NewSafeMap[int, *ConnContext](),
-		host:  fmt.Sprintf("tcp://%s", c.WsHost),
+		owner:    owner,
+		wbufPool: NewBufferPool(),
+		conns:    utils.NewSafeMap[int, *ConnContext](),
+		host:     fmt.Sprintf("tcp://%s", c.WsHost),
 	}
 
 	return this_
@@ -90,35 +86,15 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return upgrade(cctx)
 	}
 
-	header, err := ws.ReadHeader(c)
+	// 读取数据
+	data, err := wsutil.ReadClientBinary(c)
 	if err != nil {
-		log.Error("ReadHeader failed: %v", err)
-		return gnet.Close
-	}
-
-	log.Debug("读取消息头之后: %v", c.InboundBuffered())
-
-	if header.OpCode == ws.OpClose {
-		wsutil.WriteServerMessage(c, ws.OpClose, ws.NewCloseFrameBody(ws.StatusNormalClosure, ""))
-		return gnet.None
-	}
-
-	data, err := c.Next(-1)
-	log.Debug("读取消息之后: %v", c.InboundBuffered())
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return gnet.Close
+		if err != io.EOF {
+			log.Error("ReadClientText failed: %v", err)
 		}
-
-		log.Error("ReadClientBinary failed: %v", err)
 		return gnet.Close
 	}
 
-	if header.Masked {
-		ws.Cipher(data, header.Mask, 0)
-	}
-
-	log.Debug("%v", data)
 	msg := messagePool.Get()
 	msg.Conn = cctx
 	msg.Data = data
@@ -160,18 +136,17 @@ func (this_ *wsServer) Stop() {
 }
 
 func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
-	buf := wsWbufPool.Get()
-	err := wsutil.WriteServerText(buf, data)
+	buf := this_.wbufPool.Get()
+	err := wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpBinary, data)
 	if err != nil {
 		return nil
 	}
+
 	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
 		if err != nil {
 			log.Error("AsyncWrite failed: %v", err)
 		}
-
-		buf.Reset()
-		wsWbufPool.Put(buf)
+		this_.wbufPool.Put(buf)
 		return nil
 	})
 }

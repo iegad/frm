@@ -9,6 +9,4 @@ type Message struct {
 	Data []byte
 }
 
-var (
-	messagePool = utils.NewPool[Message]()
-)
+var messagePool = utils.NewPool[Message]()
