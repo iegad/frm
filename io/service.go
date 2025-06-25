@@ -109,7 +109,7 @@ type Service struct {
 }
 
 func NewService(c *Config, event IServiceEvent) *Service {
-	messageCh := make(chan *Message, c.MaxConn*100)
+	messageCh := make(chan *Message, c.MaxConn*10000)
 
 	this_ := &Service{
 		messageCh: messageCh,

@@ -83,24 +83,10 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 
 	// 升级websocket 协议
 	if !cctx.upgraded {
-		return upgrade(cctx)
+		return this_.upgrade(cctx)
 	}
 
-	// 读取数据
-	data, err := wsutil.ReadClientBinary(c)
-	if err != nil {
-		if err != io.EOF {
-			log.Error("ReadClientText failed: %v", err)
-		}
-		return gnet.Close
-	}
-
-	msg := messagePool.Get()
-	msg.Conn = cctx
-	msg.Data = data
-
-	this_.owner.messageCh <- msg
-	return gnet.None
+	return this_.readData(cctx)
 }
 
 func (this_ *wsServer) OnTick() (time.Duration, gnet.Action) {
@@ -151,7 +137,7 @@ func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
 	})
 }
 
-func upgrade(cctx *ConnContext) gnet.Action {
+func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 	u := ws.Upgrader{
 		OnHeader: func(key, value []byte) error {
 			log.Debug("Key: %v, Value: %v", string(key), string(value))
@@ -170,5 +156,26 @@ func upgrade(cctx *ConnContext) gnet.Action {
 	}
 
 	cctx.upgraded = true
+	return gnet.None
+}
+
+func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
+	// 读取数据
+	data, err := wsutil.ReadClientBinary(cctx.Conn)
+	if err != nil {
+		if err != io.EOF {
+			if werr, ok := err.(*wsutil.ClosedError); ok && werr.Code != 1000 {
+				log.Error("读取数据失败: %v", err)
+			}
+		}
+
+		return gnet.Close
+	}
+
+	msg := messagePool.Get()
+	msg.Conn = cctx
+	msg.Data = data
+
+	this_.owner.messageCh <- msg
 	return gnet.None
 }
