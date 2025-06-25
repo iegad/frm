@@ -3,30 +3,14 @@ package io
 import (
 	"time"
 
-	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 )
-
-var connContextPool = utils.NewPool[ConnContext]()
-
-func getConnContext() *ConnContext {
-	return connContextPool.Get()
-}
-
-func putConnContext(ctx *ConnContext) {
-	if ctx != nil {
-		if ctx.Conn != nil {
-			ctx.Conn = nil
-		}
-		connContextPool.Put(ctx)
-	}
-}
 
 type ConnContext struct {
 	gnet.Conn
 
-	upgraded      bool
-	server        iServer
+	upgraded      bool // websocket 使用
+	server        IServer
 	remoteAddr    string
 	xRealIP       string
 	xForwardedFor string
@@ -34,12 +18,14 @@ type ConnContext struct {
 	lastUpdate    int64
 }
 
-func (this_ *ConnContext) Init(c gnet.Conn, server iServer, xRealIP, xForwardedFor string) {
+func (this_ *ConnContext) Init(c gnet.Conn, server IServer, xRealIP, xForwardedFor string) {
 	this_.Conn = c
+	this_.upgraded = server.Proto() == Protocol_TCP
 	this_.server = server
 	this_.remoteAddr = c.RemoteAddr().String()
 	this_.xRealIP = xRealIP
 	this_.xForwardedFor = xForwardedFor
+	this_.userData = nil
 	this_.lastUpdate = time.Now().Unix()
 }
 

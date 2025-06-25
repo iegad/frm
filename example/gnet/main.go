@@ -27,7 +27,7 @@ func (this_ *echoHandler) OnDisconnected(c *io.ConnContext) {
 }
 
 func (this_ *echoHandler) OnStopped(s *io.Service) {
-	log.Debug("server has stopped...")
+	log.Debug("server has stopped...: %v", s.CurrConn())
 }
 
 func (this_ *echoHandler) OnData(c *io.ConnContext, data []byte) error {

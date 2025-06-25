@@ -5,17 +5,20 @@ import (
 	"sync"
 )
 
+// Buffer 缓冲区
 type Buffer struct {
 	buf    []byte
 	offset int
 }
 
+// NewBuffer 创建缓冲区
 func NewBuffer() *Buffer {
 	return &Buffer{
 		buf: make([]byte, 1024),
 	}
 }
 
+// Write 向缓冲区写入数据
 func (this_ *Buffer) Write(data []byte) (int, error) {
 	blen := len(this_.buf)
 	dlen := len(data)
@@ -31,6 +34,7 @@ func (this_ *Buffer) Write(data []byte) (int, error) {
 	return dlen, nil
 }
 
+// WriteUint32 向缓冲区写在大端序 uint32 值
 func (this_ *Buffer) WriteUint32(v uint32) {
 	need := this_.offset + 4
 	if len(this_.buf) < need {
@@ -47,18 +51,22 @@ func (this_ *Buffer) WriteUint32(v uint32) {
 	this_.offset += 4
 }
 
+// Bytes 获取缓冲区中的数据
 func (this_ *Buffer) Bytes() []byte {
 	return this_.buf[:this_.offset]
 }
 
+// Reset 重置缓冲区
 func (this_ *Buffer) Reset() {
 	this_.offset = 0
 }
 
+// BufferPool 缓冲区池
 type BufferPool struct {
 	pool sync.Pool
 }
 
+// NewBufferPool 创建缓冲区池
 func NewBufferPool() *BufferPool {
 	return &BufferPool{
 		pool: sync.Pool{
@@ -69,10 +77,12 @@ func NewBufferPool() *BufferPool {
 	}
 }
 
+// Get 获取 Buffer
 func (this_ *BufferPool) Get() *Buffer {
 	return this_.pool.Get().(*Buffer)
 }
 
+// Put 归还 Buffer
 func (this_ *BufferPool) Put(buf *Buffer) {
 	if buf != nil {
 		buf.Reset()

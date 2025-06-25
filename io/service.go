@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gox/frm/log"
+	"github.com/panjf2000/gnet/v2"
 )
 
 // Protocol 网络协议
@@ -61,10 +62,12 @@ const (
 	TCP_MAX_SIZE    = uint32(1024 * 1024 * 2) // 消息体最大长度
 )
 
-type iServer interface {
+type IServer interface {
+	gnet.EventHandler
+
 	Proto() Protocol
+	Host() string
 	Write(*ConnContext, []byte) error
-	Run() error
 }
 
 type IServiceEvent interface {
@@ -134,6 +137,10 @@ func NewService(c *Config, event IServiceEvent) *Service {
 	return this_
 }
 
+func (this_ *Service) CurrConn() int32 {
+	return atomic.LoadInt32(&this_.currConn)
+}
+
 func (this_ *Service) Run(nproc int) {
 	if !atomic.CompareAndSwapInt32((*int32)(&this_.state), int32(ServiceState_Stopped), int32(ServiceState_Running)) {
 		return
@@ -156,7 +163,7 @@ func (this_ *Service) Run(nproc int) {
 	if this_.tcpSvr != nil {
 		this_.wg.Add(1)
 		go func() {
-			err := this_.tcpSvr.Run()
+			err := Run(this_.tcpSvr)
 			if err != nil {
 				log.Error("tcp server run failed: %v", err)
 			}
@@ -167,7 +174,7 @@ func (this_ *Service) Run(nproc int) {
 	if this_.wsSvr != nil {
 		this_.wg.Add(1)
 		go func() {
-			err := this_.wsSvr.Run()
+			err := Run(this_.wsSvr)
 			if err != nil {
 				log.Error("ws server run failed: %v", err)
 			}
