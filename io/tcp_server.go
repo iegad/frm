@@ -45,6 +45,15 @@ func (this_ *tcpServer) OnBoot(eng gnet.Engine) gnet.Action {
 	return gnet.None
 }
 
+func (this_ *tcpServer) OnShutdown(eng gnet.Engine) {
+	this_.conns.Range(func(key int, v *ConnContext) bool {
+		connContextPool.Put(v)
+		return true
+	})
+
+	this_.conns.Clear()
+}
+
 func (this_ *tcpServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	if this_.owner.info.MaxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
@@ -100,7 +109,7 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	data, err := c.Next(mlen)
+	data, err := c.Next(-1)
 	if err != nil {
 		logging.Errorf("[%v] read failed: %v", c.RemoteAddr(), err)
 		return gnet.Close

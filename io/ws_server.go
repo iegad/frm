@@ -66,15 +66,24 @@ func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	return nil, gnet.None
 }
 
+func (this_ *wsServer) OnShutdown(eng gnet.Engine) {
+	this_.conns.Range(func(key int, v *ConnContext) bool {
+		connContextPool.Put(v)
+		return true
+	})
+
+	this_.conns.Clear()
+}
+
 func (this_ *wsServer) OnClose(c gnet.Conn, err error) gnet.Action {
 	atomic.AddInt32(&this_.owner.currConn, -1)
 
 	cctx := c.Context().(*ConnContext)
 	this_.owner.event.OnDisconnected(cctx)
 
+	cctx.SetContext(nil)
+	this_.conns.Remove(cctx.Fd())
 	putConnContext(cctx)
-	c.SetContext(nil)
-	this_.conns.Remove(c.Fd())
 	return gnet.None
 }
 
@@ -86,6 +95,7 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return this_.upgrade(cctx)
 	}
 
+	// 读取数据
 	return this_.readData(cctx)
 }
 
@@ -123,7 +133,7 @@ func (this_ *wsServer) Stop() {
 
 func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
 	buf := this_.wbufPool.Get()
-	err := wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpBinary, data)
+	err := wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpText, data)
 	if err != nil {
 		return nil
 	}
@@ -161,7 +171,7 @@ func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 
 func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 	// 读取数据
-	data, err := wsutil.ReadClientBinary(cctx.Conn)
+	data, err := wsutil.ReadClientText(cctx.Conn)
 	if err != nil {
 		if err != io.EOF {
 			if werr, ok := err.(*wsutil.ClosedError); ok && werr.Code != 1000 {
@@ -171,6 +181,8 @@ func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 
 		return gnet.Close
 	}
+
+	cctx.lastUpdate = time.Now().Unix()
 
 	msg := messagePool.Get()
 	msg.Conn = cctx
