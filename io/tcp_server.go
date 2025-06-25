@@ -81,9 +81,9 @@ func (this_ *tcpServer) OnClose(c gnet.Conn, err error) gnet.Action {
 	cctx := c.Context().(*ConnContext)
 	this_.owner.event.OnDisconnected(cctx)
 
-	putConnContext(cctx)
 	c.SetContext(nil)
 	this_.conns.Remove(c.Fd())
+	putConnContext(cctx)
 	return gnet.None
 }
 

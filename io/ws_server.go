@@ -46,6 +46,15 @@ func (this_ *wsServer) OnBoot(eng gnet.Engine) gnet.Action {
 	return gnet.None
 }
 
+func (this_ *wsServer) OnShutdown(eng gnet.Engine) {
+	this_.conns.Range(func(key int, v *ConnContext) bool {
+		connContextPool.Put(v)
+		return true
+	})
+
+	this_.conns.Clear()
+}
+
 func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	if this_.owner.info.MaxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
@@ -64,15 +73,6 @@ func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	this_.conns.Set(c.Fd(), cctx)
 	c.SetContext(cctx)
 	return nil, gnet.None
-}
-
-func (this_ *wsServer) OnShutdown(eng gnet.Engine) {
-	this_.conns.Range(func(key int, v *ConnContext) bool {
-		connContextPool.Put(v)
-		return true
-	})
-
-	this_.conns.Clear()
 }
 
 func (this_ *wsServer) OnClose(c gnet.Conn, err error) gnet.Action {
