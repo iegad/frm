@@ -13,6 +13,14 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
+type IServer interface {
+	gnet.EventHandler
+
+	Proto() Protocol
+	Host() string
+	Write(*ConnContext, []byte) error
+}
+
 type baseServer struct {
 	gnet.BuiltinEventEngine
 	eng gnet.Engine

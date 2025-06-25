@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 
 	"github.com/gox/frm/log"
-	"github.com/panjf2000/gnet/v2"
 )
 
 // Protocol 网络协议
@@ -33,25 +32,11 @@ func (this_ Protocol) String() string {
 	return "none"
 }
 
-// ServiceState 服务器状态
-type ServiceState int32
-
 const (
-	ServiceState_Stopped  ServiceState = 0 // 服务器状态: 停止
-	ServiceState_Stopping ServiceState = 1 // 服务器状态: 正在停止中
-	ServiceState_Running  ServiceState = 2 // 服务器状态: 运行
+	ServiceState_Stopped  int32 = 0 // 服务器状态: 停止
+	ServiceState_Stopping int32 = 1 // 服务器状态: 正在停止中
+	ServiceState_Running  int32 = 2 // 服务器状态: 运行
 )
-
-func (this_ ServiceState) String() string {
-	switch this_ {
-	case ServiceState_Stopping:
-		return "service_stopping"
-	case ServiceState_Running:
-		return "service_running"
-	}
-
-	return "service_stopped"
-}
 
 // 常量定义
 const (
@@ -61,14 +46,6 @@ const (
 	TCP_HEADER_SIZE = 4                       // 消息头长度
 	TCP_MAX_SIZE    = uint32(1024 * 1024 * 2) // 消息体最大长度
 )
-
-type IServer interface {
-	gnet.EventHandler
-
-	Proto() Protocol
-	Host() string
-	Write(*ConnContext, []byte) error
-}
 
 type IServiceEvent interface {
 	OnInit(*Service) error
@@ -87,12 +64,12 @@ type Config struct {
 }
 
 type serverInfo struct {
-	State    ServiceState `json:"state"`
-	MaxConn  int32        `json:"max_conn"`
-	CurrConn int32        `json:"curr_conn"`
-	Timeout  int64        `json:"timeout"`
-	TcpHost  string       `json:"tcp_host,omitempty"`
-	WsHost   string       `json:"ws_host,omitempty"`
+	State    int32  `json:"state"`
+	MaxConn  int32  `json:"max_conn"`
+	CurrConn int32  `json:"curr_conn"`
+	Timeout  int64  `json:"timeout"`
+	TcpHost  string `json:"tcp_host,omitempty"`
+	WsHost   string `json:"ws_host,omitempty"`
 }
 
 func (this_ *serverInfo) String() string {
@@ -101,7 +78,7 @@ func (this_ *serverInfo) String() string {
 }
 
 type Service struct {
-	state     ServiceState // use int32 for atomic operations
+	state     int32 // use int32 for atomic operations
 	currConn  int32
 	tcpSvr    *tcpServer
 	wsSvr     *wsServer
@@ -142,7 +119,7 @@ func (this_ *Service) CurrConn() int32 {
 }
 
 func (this_ *Service) Run(nproc int) {
-	if !atomic.CompareAndSwapInt32((*int32)(&this_.state), int32(ServiceState_Stopped), int32(ServiceState_Running)) {
+	if !atomic.CompareAndSwapInt32(&this_.state, ServiceState_Stopped, ServiceState_Running) {
 		return
 	}
 
@@ -188,7 +165,7 @@ func (this_ *Service) Run(nproc int) {
 }
 
 func (this_ *Service) Stop() {
-	if !atomic.CompareAndSwapInt32((*int32)(&this_.state), int32(ServiceState_Running), int32(ServiceState_Stopping)) {
+	if !atomic.CompareAndSwapInt32(&this_.state, ServiceState_Running, ServiceState_Stopping) {
 		return
 	}
 
