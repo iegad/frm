@@ -1,6 +1,8 @@
 package io
 
 import (
+	"time"
+
 	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 )
@@ -29,6 +31,7 @@ type ConnContext struct {
 	xRealIP       string
 	xForwardedFor string
 	userData      any
+	lastUpdate    int64
 }
 
 func (this_ *ConnContext) Init(c gnet.Conn, server iServer, xRealIP, xForwardedFor string) {
@@ -37,6 +40,7 @@ func (this_ *ConnContext) Init(c gnet.Conn, server iServer, xRealIP, xForwardedF
 	this_.remoteAddr = c.RemoteAddr().String()
 	this_.xRealIP = xRealIP
 	this_.xForwardedFor = xForwardedFor
+	this_.lastUpdate = time.Now().Unix()
 }
 
 func (this_ *ConnContext) Protocol() Protocol {

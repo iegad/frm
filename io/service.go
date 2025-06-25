@@ -80,12 +80,14 @@ type Config struct {
 	WsHost    string `json:"ws_host,omitempty"`
 	MaxConn   int32  `json:"max_conn"`
 	HeadBlend uint32 `json:"-"`
+	Timeout   int64  `json:"timeout"`
 }
 
 type serverInfo struct {
 	State    ServiceState `json:"state"`
 	MaxConn  int32        `json:"max_conn"`
 	CurrConn int32        `json:"curr_conn"`
+	Timeout  int64        `json:"timeout"`
 	TcpHost  string       `json:"tcp_host,omitempty"`
 	WsHost   string       `json:"ws_host,omitempty"`
 }
@@ -97,18 +99,17 @@ func (this_ *serverInfo) String() string {
 
 type Service struct {
 	state     ServiceState // use int32 for atomic operations
-	maxConn   int32
 	currConn  int32
 	tcpSvr    *tcpServer
 	wsSvr     *wsServer
-	messageCh chan *message
+	messageCh chan *Message
 	info      *serverInfo
 	event     IServiceEvent
 	wg        sync.WaitGroup
 }
 
 func NewService(c *Config, event IServiceEvent) *Service {
-	messageCh := make(chan *message, c.MaxConn*100)
+	messageCh := make(chan *Message, c.MaxConn*100)
 
 	this_ := &Service{
 		messageCh: messageCh,
@@ -117,6 +118,7 @@ func NewService(c *Config, event IServiceEvent) *Service {
 			MaxConn: c.MaxConn,
 			TcpHost: c.TcpHost,
 			WsHost:  c.WsHost,
+			Timeout: c.Timeout,
 		},
 		event: event,
 	}
@@ -211,7 +213,7 @@ func (this_ *Service) messageProc(wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func (this_ *Service) messageHandle(msg *message) {
+func (this_ *Service) messageHandle(msg *Message) {
 	err := this_.event.OnData(msg.Conn, msg.Data)
 	if err != nil {
 		msg.Conn.Close()

@@ -3,9 +3,12 @@ package io
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"runtime"
 	"sync/atomic"
+	"time"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -24,12 +27,14 @@ type wsServer struct {
 	eng gnet.Engine
 
 	owner *Service
+	conns *utils.SafeMap[int, *ConnContext]
 	host  string
 }
 
 func newWsServer(owner *Service, c *Config) *wsServer {
 	this_ := &wsServer{
 		owner: owner,
+		conns: utils.NewSafeMap[int, *ConnContext](),
 		host:  fmt.Sprintf("tcp://%s", c.WsHost),
 	}
 
@@ -46,7 +51,7 @@ func (this_ *wsServer) OnBoot(eng gnet.Engine) gnet.Action {
 }
 
 func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
-	if this_.owner.maxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.maxConn {
+	if this_.owner.info.MaxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
 	}
 
@@ -60,6 +65,7 @@ func (this_ *wsServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	}
 
 	atomic.AddInt32(&this_.owner.currConn, 1)
+	this_.conns.Set(c.Fd(), cctx)
 	c.SetContext(cctx)
 	return nil, gnet.None
 }
@@ -72,47 +78,67 @@ func (this_ *wsServer) OnClose(c gnet.Conn, err error) gnet.Action {
 
 	putConnContext(cctx)
 	c.SetContext(nil)
+	this_.conns.Remove(c.Fd())
 	return gnet.None
 }
 
 func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 	cctx := c.Context().(*ConnContext)
 
+	// 升级websocket 协议
 	if !cctx.upgraded {
-		u := ws.Upgrader{
-			OnHeader: func(key, value []byte) error {
-				log.Debug("Key: %v, Value: %v", string(key), string(value))
-				return nil
-			},
-			OnRequest: func(uri []byte) error {
-				log.Debug("URI: %s", string(uri))
-				return nil
-			},
-		}
-
-		_, err := u.Upgrade(c)
-		if err != nil {
-			log.Error("upgrade failed: %v", err)
-			return gnet.Close
-		}
-
-		cctx.upgraded = true
-		return gnet.None
+		return upgrade(cctx)
 	}
 
-	data, err := wsutil.ReadClientText(c)
+	header, err := ws.ReadHeader(c)
 	if err != nil {
-		log.Error("read failed: %v", err)
+		log.Error("ReadHeader failed: %v", err)
 		return gnet.Close
 	}
 
+	log.Debug("读取消息头之后: %v", c.InboundBuffered())
+
+	if header.OpCode == ws.OpClose {
+		wsutil.WriteServerMessage(c, ws.OpClose, ws.NewCloseFrameBody(ws.StatusNormalClosure, ""))
+		return gnet.None
+	}
+
+	data, err := c.Next(-1)
+	log.Debug("读取消息之后: %v", c.InboundBuffered())
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return gnet.Close
+		}
+
+		log.Error("ReadClientBinary failed: %v", err)
+		return gnet.Close
+	}
+
+	if header.Masked {
+		ws.Cipher(data, header.Mask, 0)
+	}
+
+	log.Debug("%v", data)
 	msg := messagePool.Get()
 	msg.Conn = cctx
 	msg.Data = data
 
 	this_.owner.messageCh <- msg
-
 	return gnet.None
+}
+
+func (this_ *wsServer) OnTick() (time.Duration, gnet.Action) {
+	tnow := time.Now().Unix()
+	timeout := this_.owner.info.Timeout
+
+	this_.conns.Range(func(fd int, cctx *ConnContext) bool {
+		if tnow-cctx.lastUpdate > timeout {
+			cctx.Close()
+		}
+		return true
+	})
+
+	return time.Second * 15, gnet.None
 }
 
 func (this_ *wsServer) Run() error {
@@ -125,6 +151,7 @@ func (this_ *wsServer) Run() error {
 		gnet.WithSocketSendBuffer(RECV_BUF_SIZE),
 		gnet.WithSocketRecvBuffer(SEND_BUF_SIZE),
 		gnet.WithLogLevel(logging.DebugLevel),
+		gnet.WithTicker(true),
 	)
 }
 
@@ -134,7 +161,7 @@ func (this_ *wsServer) Stop() {
 
 func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
 	buf := wsWbufPool.Get()
-	err := wsutil.WriteServerMessage(buf, ws.OpText, data)
+	err := wsutil.WriteServerText(buf, data)
 	if err != nil {
 		return nil
 	}
@@ -147,4 +174,26 @@ func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
 		wsWbufPool.Put(buf)
 		return nil
 	})
+}
+
+func upgrade(cctx *ConnContext) gnet.Action {
+	u := ws.Upgrader{
+		OnHeader: func(key, value []byte) error {
+			log.Debug("Key: %v, Value: %v", string(key), string(value))
+			return nil
+		},
+		OnRequest: func(uri []byte) error {
+			log.Debug("URI: %s", string(uri))
+			return nil
+		},
+	}
+
+	_, err := u.Upgrade(cctx.Conn)
+	if err != nil {
+		log.Error("upgrade failed: %v", err)
+		return gnet.Close
+	}
+
+	cctx.upgraded = true
+	return gnet.None
 }

@@ -1,12 +1,12 @@
 package io
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"runtime"
 	"sync/atomic"
+	"time"
 
 	"github.com/gox/frm/log"
 	"github.com/gox/frm/utils"
@@ -14,21 +14,23 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
-var tcpBufPool = utils.NewPool[bytes.Buffer]()
-
 type tcpServer struct {
 	gnet.BuiltinEventEngine
 	eng gnet.Engine
 
 	headBlend uint32
+	wbufPool  *BufferPool
 	owner     *Service
+	conns     *utils.SafeMap[int, *ConnContext]
 	host      string
 }
 
 func newTcpServer(owner *Service, c *Config) *tcpServer {
 	return &tcpServer{
-		owner:     owner,
 		headBlend: c.HeadBlend,
+		wbufPool:  NewBufferPool(),
+		owner:     owner,
+		conns:     utils.NewSafeMap[int, *ConnContext](),
 		host:      fmt.Sprintf("tcp://%v", c.TcpHost),
 	}
 }
@@ -43,7 +45,7 @@ func (this_ *tcpServer) OnBoot(eng gnet.Engine) gnet.Action {
 }
 
 func (this_ *tcpServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
-	if this_.owner.maxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.maxConn {
+	if this_.owner.info.MaxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
 	}
 
@@ -59,6 +61,7 @@ func (this_ *tcpServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	atomic.AddInt32(&this_.owner.currConn, 1)
 	c.SetContext(cctx)
 	cctx.upgraded = true
+	this_.conns.Set(c.Fd(), cctx)
 	return nil, gnet.None
 }
 
@@ -70,6 +73,7 @@ func (this_ *tcpServer) OnClose(c gnet.Conn, err error) gnet.Action {
 
 	putConnContext(cctx)
 	c.SetContext(nil)
+	this_.conns.Remove(c.Fd())
 	return gnet.None
 }
 
@@ -101,12 +105,29 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.Close
 	}
 
-	msg := messagePool.Get()
-	msg.Conn = c.Context().(*ConnContext)
-	msg.Data = data[TCP_HEADER_SIZE:]
-	this_.owner.messageCh <- msg
+	cctx := c.Context().(*ConnContext)
+	cctx.lastUpdate = time.Now().Unix()
 
+	msg := messagePool.Get()
+	msg.Conn = cctx
+	msg.Data = data[TCP_HEADER_SIZE:]
+
+	this_.owner.messageCh <- msg
 	return gnet.None
+}
+
+func (this_ *tcpServer) OnTick() (time.Duration, gnet.Action) {
+	tnow := time.Now().Unix()
+	timeout := this_.owner.info.Timeout
+
+	this_.conns.Range(func(fd int, cctx *ConnContext) bool {
+		if tnow-cctx.lastUpdate > timeout {
+			cctx.Close()
+		}
+		return true
+	})
+
+	return time.Second * 15, gnet.None
 }
 
 func (this_ *tcpServer) Run() error {
@@ -119,6 +140,7 @@ func (this_ *tcpServer) Run() error {
 		gnet.WithSocketSendBuffer(RECV_BUF_SIZE),
 		gnet.WithSocketRecvBuffer(SEND_BUF_SIZE),
 		gnet.WithLogLevel(logging.DebugLevel),
+		gnet.WithTicker(true),
 	)
 }
 
@@ -127,11 +149,10 @@ func (this_ *tcpServer) Stop() {
 }
 
 func (this_ *tcpServer) Write(c *ConnContext, data []byte) error {
-	buf := tcpBufPool.Get()
+	buf := this_.wbufPool.Get()
 	dlen := len(data)
 	header := uint32(dlen) ^ this_.headBlend
-	_ = binary.Write(buf, binary.BigEndian, header)
-
+	buf.WriteUint32(header)
 	buf.Write(data)
 
 	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
@@ -139,7 +160,7 @@ func (this_ *tcpServer) Write(c *ConnContext, data []byte) error {
 			log.Error("AsyncWrite failed: %v", err)
 		}
 
-		tcpBufPool.Put(buf)
+		this_.wbufPool.Put(buf)
 		return nil
 	})
 }

@@ -4,12 +4,11 @@ import (
 	"github.com/gox/frm/utils"
 )
 
-type message struct {
-	Conn  *ConnContext
-	Data  []byte
-	Error error
+type Message struct {
+	Conn *ConnContext
+	Data []byte
 }
 
 var (
-	messagePool = utils.NewPool[message]()
+	messagePool = utils.NewPool[Message]()
 )

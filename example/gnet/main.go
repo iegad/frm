@@ -40,6 +40,7 @@ func main() {
 		WsHost:    ":9091",
 		MaxConn:   10000,
 		HeadBlend: 0x01020304,
+		Timeout:   60,
 	}, &echoHandler{})
 
 	sigCh := make(chan os.Signal, 1)
