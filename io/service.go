@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gox/frm/log"
+	"github.com/gox/frm/utils"
 )
 
 // Protocol 网络协议
@@ -80,10 +81,11 @@ func (this_ *serverInfo) String() string {
 type Service struct {
 	state     int32 // use int32 for atomic operations
 	currConn  int32
+	info      *serverInfo
 	tcpSvr    *tcpServer
 	wsSvr     *wsServer
+	conns     *utils.SafeMap[int, *ConnContext]
 	messageCh chan *Message
-	info      *serverInfo
 	event     IServiceEvent
 	wg        sync.WaitGroup
 }
@@ -92,6 +94,7 @@ func NewService(c *Config, event IServiceEvent) *Service {
 	messageCh := make(chan *Message, c.MaxConn*10000)
 
 	this_ := &Service{
+		conns:     utils.NewSafeMap[int, *ConnContext](),
 		messageCh: messageCh,
 		info: &serverInfo{
 			State:   ServiceState_Stopped,
@@ -115,7 +118,7 @@ func NewService(c *Config, event IServiceEvent) *Service {
 }
 
 func (this_ *Service) CurrConn() int32 {
-	return atomic.LoadInt32(&this_.currConn)
+	return int32(this_.conns.Count())
 }
 
 func (this_ *Service) Run(nproc int) {

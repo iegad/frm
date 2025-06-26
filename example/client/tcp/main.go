@@ -73,6 +73,5 @@ func main() {
 
 	log.Info("请求总数: %d, 发送数据: %d Bytes, 接收数据: %d Bytes, 耗时: %v",
 		ntime, ssize, rsize, spend)
-	log.Info("QPS: %.2f, 吞吐量: %.2f Bytes/s", float64(ntime)/spend, float64(ssize)/spend)
-	log.Info("总吞吐量: %.2f Bytes/s", float64(ssize+rsize)/spend)
+	log.Info("QPS: %.2f, 吞吐量: %.2f Bytes/s", float64(ntime)/spend, float64(ssize+rsize)/spend)
 }

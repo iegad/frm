@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gox/frm/log"
-	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
@@ -27,7 +26,6 @@ type baseServer struct {
 
 	owner    *Service
 	wbufPool *BufferPool
-	conns    *utils.SafeMap[int, *ConnContext]
 	server   IServer
 	host     string
 	cctxPool sync.Pool
@@ -37,7 +35,6 @@ func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 	return &baseServer{
 		owner:    owner,
 		wbufPool: NewBufferPool(),
-		conns:    utils.NewSafeMap[int, *ConnContext](),
 		server:   server,
 		host:     fmt.Sprintf("tcp://%v", host),
 		cctxPool: sync.Pool{
@@ -86,7 +83,7 @@ func (this_ *baseServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 
 	atomic.AddInt32(&this_.owner.currConn, 1)
 	cctx.SetContext(cctx)
-	this_.conns.Set(cctx.Fd(), cctx)
+	this_.owner.conns.Set(cctx.Fd(), cctx)
 	return nil, gnet.None
 }
 
@@ -101,7 +98,7 @@ func (this_ *baseServer) OnClose(c gnet.Conn, err error) gnet.Action {
 	this_.owner.event.OnDisconnected(cctx)
 
 	cctx.SetContext(nil)
-	this_.conns.Remove(cctx.Fd())
+	this_.owner.conns.Remove(cctx.Fd())
 	this_.putConnContext(cctx)
 	return gnet.None
 }
@@ -110,7 +107,7 @@ func (this_ *baseServer) OnTick() (time.Duration, gnet.Action) {
 	tnow := time.Now().Unix()
 	timeout := this_.owner.info.Timeout
 
-	this_.conns.Range(func(fd int, cctx *ConnContext) bool {
+	this_.owner.conns.Range(func(fd int, cctx *ConnContext) bool {
 		if tnow-cctx.lastUpdate > timeout {
 			cctx.Close()
 		}

@@ -1,6 +1,8 @@
 package io
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"time"
 
@@ -76,16 +78,18 @@ func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 
 func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 	// 读取数据
-	data, err := wsutil.ReadClientBinary(cctx.Conn)
-	if err != nil {
-		if err != io.EOF {
-			if werr, ok := err.(*wsutil.ClosedError); ok && werr.Code != 1000 {
-				log.Error("读取数据失败: %v", err)
-			}
-		}
+	n := cctx.InboundBuffered()
+	data, _ := cctx.Peek(n)
 
+	data, err := wsutil.ReadClientBinary(bytes.NewBuffer(data))
+	if err != nil {
+		if err == io.ErrUnexpectedEOF || err == io.EOF || errors.Is(err, io.ErrShortBuffer) {
+			return gnet.None
+		}
 		return gnet.Close
 	}
+
+	cctx.Discard(n)
 
 	cctx.lastUpdate = time.Now().Unix()
 
