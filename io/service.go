@@ -183,8 +183,8 @@ func (this_ *Service) Stop() {
 
 func (this_ *Service) messageProc(wg *sync.WaitGroup) {
 	var (
-		running = int32(ServiceState_Running)
-		state   = (*int32)(&this_.state)
+		running = ServiceState_Running
+		state   = &this_.state
 	)
 
 	for msg := range this_.messageCh {
