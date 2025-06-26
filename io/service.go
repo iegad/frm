@@ -201,8 +201,8 @@ func (this_ *Service) messageProc(wg *sync.WaitGroup) {
 }
 
 func (this_ *Service) messageHandle(msg *Message) {
-	err := this_.event.OnData(msg.Conn, msg.Data)
+	err := this_.event.OnData(msg.Context, msg.Data)
 	if err != nil {
-		msg.Conn.Close()
+		msg.Context.Close()
 	}
 }

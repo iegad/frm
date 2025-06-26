@@ -1,0 +1,1 @@
+go build -ldflags="-w -s" -o ws_test.exe main.go

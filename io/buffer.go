@@ -18,6 +18,13 @@ func NewBuffer() *Buffer {
 	}
 }
 
+func NewBufferWithData(buf []byte) *Buffer {
+	return &Buffer{
+		buf:    buf,
+		offset: len(buf),
+	}
+}
+
 // Write 向缓冲区写入数据
 func (this_ *Buffer) Write(data []byte) (int, error) {
 	blen := len(this_.buf)

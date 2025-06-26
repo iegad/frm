@@ -5,8 +5,8 @@ import (
 )
 
 type Message struct {
-	Conn *ConnContext
-	Data []byte
+	Context *ConnContext
+	Data    []byte
 }
 
 var messagePool = utils.NewPool[Message]()

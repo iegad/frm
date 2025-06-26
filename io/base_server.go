@@ -26,6 +26,7 @@ type baseServer struct {
 
 	owner    *Service
 	wbufPool *BufferPool
+	rbufPool *BufferPool
 	server   IServer
 	host     string
 	cctxPool sync.Pool
@@ -35,6 +36,7 @@ func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 	return &baseServer{
 		owner:    owner,
 		wbufPool: NewBufferPool(),
+		rbufPool: NewBufferPool(),
 		server:   server,
 		host:     fmt.Sprintf("tcp://%v", host),
 		cctxPool: sync.Pool{
@@ -82,7 +84,6 @@ func (this_ *baseServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 	}
 
 	atomic.AddInt32(&this_.owner.currConn, 1)
-	cctx.SetContext(cctx)
 	this_.owner.conns.Set(cctx.Fd(), cctx)
 	return nil, gnet.None
 }
@@ -91,14 +92,8 @@ func (this_ *baseServer) OnClose(c gnet.Conn, err error) gnet.Action {
 	atomic.AddInt32(&this_.owner.currConn, -1)
 	cctx := c.Context().(*ConnContext)
 
-	if cctx == nil || cctx.Conn == nil {
-		return gnet.None
-	}
-
-	this_.owner.event.OnDisconnected(cctx)
-
-	cctx.SetContext(nil)
 	this_.owner.conns.Remove(cctx.Fd())
+	this_.owner.event.OnDisconnected(cctx)
 	this_.putConnContext(cctx)
 	return gnet.None
 }
@@ -130,14 +125,7 @@ func (this_ *baseServer) getConnContext() *ConnContext {
 }
 
 func (this_ *baseServer) putConnContext(cctx *ConnContext) {
-	if cctx.Conn != nil {
-		cctx.Conn = nil
-	}
-
-	if cctx.userData != nil {
-		cctx.userData = nil
-	}
-
+	cctx.Reset()
 	this_.cctxPool.Put(cctx)
 }
 

@@ -13,12 +13,12 @@ import (
 )
 
 type wsServer struct {
-	*baseServer
+	baseServer
 }
 
 func newWsServer(owner *Service, c *Config) *wsServer {
 	this_ := &wsServer{}
-	this_.baseServer = newBaseServer(owner, this_, c.WsHost)
+	this_.baseServer = *newBaseServer(owner, this_, c.WsHost)
 	return this_
 }
 
@@ -38,14 +38,11 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 	return this_.readData(cctx)
 }
 
-func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
+func (this_ *wsServer) Write(cctx *ConnContext, data []byte) error {
 	buf := this_.wbufPool.Get()
-	err := wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpBinary, data)
-	if err != nil {
-		return nil
-	}
+	wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpBinary, data)
 
-	return c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
+	return cctx.asyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
 		if err != nil {
 			log.Error("AsyncWrite failed: %v", err)
 		}
@@ -66,7 +63,7 @@ func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 		},
 	}
 
-	_, err := u.Upgrade(cctx.Conn)
+	_, err := u.Upgrade(cctx.c)
 	if err != nil {
 		log.Error("upgrade failed: %v", err)
 		return gnet.Close
@@ -78,8 +75,8 @@ func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 
 func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 	// 读取数据
-	n := cctx.InboundBuffered()
-	data, _ := cctx.Peek(n)
+	n := cctx.c.InboundBuffered()
+	data, _ := cctx.c.Peek(n)
 
 	data, err := wsutil.ReadClientBinary(bytes.NewBuffer(data))
 	if err != nil {
@@ -89,12 +86,12 @@ func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 		return gnet.Close
 	}
 
-	cctx.Discard(n)
+	cctx.c.Discard(n)
 
 	cctx.lastUpdate = time.Now().Unix()
 
 	msg := messagePool.Get()
-	msg.Conn = cctx
+	msg.Context = cctx
 	msg.Data = data
 
 	this_.owner.messageCh <- msg
