@@ -46,13 +46,9 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	data, err := c.Peek(mlen)
-	if err != nil {
-		log.Error("c.Next failed: %T => %v", err, err)
-		return gnet.Close
-	}
-
+	data, _ = c.Peek(mlen)
 	c.Discard(mlen)
+
 	cctx := c.Context().(*ConnContext)
 	cctx.lastUpdate = time.Now().Unix()
 

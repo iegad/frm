@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	N     = 1000
+	N     = 500
 	NCONN = 100
 	HOST  = "18.166.30.234:9090"
 	// HOST = "192.168.0.101:9090"
@@ -52,7 +52,6 @@ func testClient(wg *sync.WaitGroup) {
 		}
 
 		if str != string(rdata) {
-			log.Debug(str)
 			log.Fatal(string(rdata))
 		}
 
