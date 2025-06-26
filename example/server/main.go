@@ -3,60 +3,45 @@ package main
 import (
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
+	"github.com/gox/frm/io"
 	"github.com/gox/frm/log"
-	"github.com/gox/frm/nw"
 )
 
-type EchoService struct {
-}
+type echoHandler struct{}
 
-func (this_ *EchoService) OnConnected(sess nw.ISess) error {
-	log.Info("[%d]%v has connected", sess.SockFd(), sess.RemoteAddr().String())
+func (this_ *echoHandler) OnInit(s *io.Service) error {
+	log.Debug("server is running...")
 	return nil
 }
 
-func (this_ *EchoService) OnDisconnected(sess nw.ISess) {
-	log.Info("[%d]%v has disconnected", sess.SockFd(), sess.RemoteAddr().String())
-}
-
-func (this_ *EchoService) OnData(sess nw.ISess, data []byte) bool {
-	sess.Write(data)
-	return true
-}
-
-func (this_ *EchoService) OnStarted(ios *nw.IoServer) error {
-	log.Info("running ...: %v, %v", ios.TcpAddr(), ios.WsAddr())
+func (this_ *echoHandler) OnConnected(c *io.ConnContext) error {
+	log.Debug("[%d:%s] has connected", c.Fd(), c.RemoteAddr())
 	return nil
 }
 
-func (this_ *EchoService) OnStopped(ios *nw.IoServer) {
-	log.Info("stop !!!")
+func (this_ *echoHandler) OnDisconnected(c *io.ConnContext) {
+	log.Debug("[%d:%s] has disconnected", c.Fd(), c.RemoteAddr())
 }
 
-func (this_ *EchoService) OnDecrypt(data []byte) ([]byte, error) {
-	n := len(data)
-	buf := make([]byte, n)
-	copy(buf, data)
-	return buf, nil
+func (this_ *echoHandler) OnStopped(s *io.Service) {
+	log.Debug("server has stopped...: %v", s.CurrConn())
 }
 
-func (this_ *EchoService) OnEncrypt(data []byte) ([]byte, error) {
-	return data, nil
+func (this_ *echoHandler) OnData(c *io.ConnContext, data []byte) error {
+	return c.Write(data)
 }
 
 func main() {
-	ios, err := nw.NewIOServer(&nw.IOSConfig{
-		IP:      "0.0.0.0",
-		WsPort:  9091,
-		TcpPort: 9090,
-		Timeout: 300,
-		Blend:   0x12345678,
-	}, &EchoService{})
-	if err != nil {
-		log.Fatal(err)
-	}
+	server := io.NewService(&io.Config{
+		TcpHost:   ":9090",
+		WsHost:    ":9091",
+		MaxConn:   10000,
+		HeadBlend: 0x01020304,
+		Timeout:   60,
+	}, &echoHandler{})
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -64,11 +49,8 @@ func main() {
 	go func() {
 		sig := <-sigCh
 		log.Debug("收到信号: %v", sig)
-		ios.Stop()
+		server.Stop()
 	}()
 
-	err = ios.Run()
-	if err != nil {
-		log.Error(err)
-	}
+	server.Run(runtime.NumCPU())
 }

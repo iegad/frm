@@ -38,7 +38,7 @@ func (this_ *wsServer) OnTraffic(c gnet.Conn) gnet.Action {
 
 func (this_ *wsServer) Write(c *ConnContext, data []byte) error {
 	buf := this_.wbufPool.Get()
-	err := wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpText, data)
+	err := wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpBinary, data)
 	if err != nil {
 		return nil
 	}
@@ -76,7 +76,7 @@ func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 
 func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 	// 读取数据
-	data, err := wsutil.ReadClientText(cctx.Conn)
+	data, err := wsutil.ReadClientBinary(cctx.Conn)
 	if err != nil {
 		if err != io.EOF {
 			if werr, ok := err.(*wsutil.ClosedError); ok && werr.Code != 1000 {
