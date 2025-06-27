@@ -54,7 +54,13 @@ func (this_ *wsServer) Write(cctx *ConnContext, data []byte) error {
 func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 	u := ws.Upgrader{
 		OnHeader: func(key, value []byte) error {
-			log.Debug("Key: %v, Value: %v", string(key), string(value))
+			switch string(key) {
+			case "X-Forwarded-For":
+				cctx.xForwardedFor = string(value)
+
+			case "X-Real-IP":
+				cctx.xRealIP = string(value)
+			}
 			return nil
 		},
 		OnRequest: func(uri []byte) error {

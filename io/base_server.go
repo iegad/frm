@@ -12,31 +12,31 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
+// IServer 服务接口
 type IServer interface {
 	gnet.EventHandler
 
-	Proto() Protocol
-	Host() string
-	Write(*ConnContext, []byte) error
+	Proto() Protocol                  // 协议
+	Host() string                     // 监听地址
+	Write(*ConnContext, []byte) error // 写数据
 }
 
+// baseServer 基类
 type baseServer struct {
 	gnet.BuiltinEventEngine
 	eng gnet.Engine
 
-	owner    *Service
-	wbufPool *BufferPool
-	rbufPool *BufferPool
-	server   IServer
-	host     string
-	cctxPool sync.Pool
+	owner    *Service    // 所属服务
+	wbufPool *BufferPool // 写对象池
+	server   IServer     // 实际的服务
+	host     string      // 监听地址
+	cctxPool sync.Pool   // ConnContext 对象池
 }
 
 func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 	return &baseServer{
 		owner:    owner,
 		wbufPool: NewBufferPool(),
-		rbufPool: NewBufferPool(),
 		server:   server,
 		host:     fmt.Sprintf("tcp://%v", host),
 		cctxPool: sync.Pool{
@@ -60,22 +60,13 @@ func (this_ *baseServer) OnBoot(eng gnet.Engine) gnet.Action {
 	return gnet.None
 }
 
-func (this_ *baseServer) OnShutdown(eng gnet.Engine) {
-	// this_.conns.Range(func(fd int, cctx *ConnContext) bool {
-	// 	this_.putConnContext(cctx)
-	// 	return true
-	// })
-
-	// this_.conns.Clear()
-}
-
 func (this_ *baseServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
-	if this_.owner.info.MaxConn > 0 && atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
+	if atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
 	}
 
 	cctx := this_.getConnContext()
-	cctx.Init(c, this_, "", "")
+	cctx.Init(c, this_)
 
 	if err := this_.owner.event.OnConnected(cctx); err != nil {
 		log.Error("[%d:%v] connected failed: %v", err)

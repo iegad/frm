@@ -7,24 +7,23 @@ import (
 )
 
 type ConnContext struct {
-	c gnet.Conn
-
-	upgraded      bool // websocket 使用
-	server        IServer
-	remoteAddr    string
+	c             gnet.Conn // 原始连接
+	upgraded      bool      // websocket 使用
+	lastUpdate    int64     // 最后接收消息时间
+	server        IServer   // 所属服务
+	remoteAddr    string    // 远端地址
+	userData      any       // 用户数据
 	xRealIP       string
 	xForwardedFor string
-	userData      any
-	lastUpdate    int64
 }
 
-func (this_ *ConnContext) Init(c gnet.Conn, server IServer, xRealIP, xForwardedFor string) {
+func (this_ *ConnContext) Init(c gnet.Conn, server IServer) {
 	this_.c = c
 	this_.upgraded = server.Proto() == Protocol_TCP
 	this_.server = server
 	this_.remoteAddr = c.RemoteAddr().String()
-	this_.xRealIP = xRealIP
-	this_.xForwardedFor = xForwardedFor
+	this_.xRealIP = ""
+	this_.xForwardedFor = ""
 	this_.userData = nil
 	this_.lastUpdate = time.Now().Unix()
 	c.SetContext(this_)
@@ -32,7 +31,6 @@ func (this_ *ConnContext) Init(c gnet.Conn, server IServer, xRealIP, xForwardedF
 
 func (this_ *ConnContext) Reset() {
 	this_.c.SetContext(nil)
-	this_.userData = nil
 }
 
 func (this_ *ConnContext) Fd() int {

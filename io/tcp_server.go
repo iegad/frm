@@ -14,7 +14,6 @@ type tcpServer struct {
 }
 
 func newTcpServer(owner *Service, c *Config) *tcpServer {
-
 	this_ := &tcpServer{
 		headBlend: c.HeadBlend,
 	}

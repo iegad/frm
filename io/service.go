@@ -48,6 +48,15 @@ const (
 	TCP_MAX_SIZE    = uint32(1024 * 1024 * 2) // 消息体最大长度
 )
 
+// Message 消息
+type Message struct {
+	Context *ConnContext
+	Data    []byte
+}
+
+var messagePool = utils.NewPool[Message]()
+
+// IServiceEvent 服务事件
 type IServiceEvent interface {
 	OnInit(*Service) error
 	OnConnected(*ConnContext) error
@@ -56,6 +65,7 @@ type IServiceEvent interface {
 	OnData(*ConnContext, []byte) error
 }
 
+// Config 服务配置
 type Config struct {
 	TcpHost   string `json:"tcp_host,omitempty"`
 	WsHost    string `json:"ws_host,omitempty"`
@@ -64,6 +74,7 @@ type Config struct {
 	Timeout   int64  `json:"timeout"`
 }
 
+// serverInfo 服务信息
 type serverInfo struct {
 	State    int32  `json:"state"`
 	MaxConn  int32  `json:"max_conn"`
@@ -78,19 +89,29 @@ func (this_ *serverInfo) String() string {
 	return string(jstr)
 }
 
+// Service 网络服务
 type Service struct {
-	state     int32 // use int32 for atomic operations
-	currConn  int32
-	info      *serverInfo
-	tcpSvr    *tcpServer
-	wsSvr     *wsServer
-	conns     *utils.SafeMap[int, *ConnContext]
-	messageCh chan *Message
-	event     IServiceEvent
-	wg        sync.WaitGroup
+	currConn  int32                             // 当前连接数
+	info      *serverInfo                       // 服务信息
+	tcpSvr    *tcpServer                        // tcp服务
+	wsSvr     *wsServer                         // websocket服务
+	conns     *utils.SafeMap[int, *ConnContext] // 客户端连接池
+	messageCh chan *Message                     // 消息管道
+	event     IServiceEvent                     // 事件
+	wg        sync.WaitGroup                    // 协程同步
 }
 
 func NewService(c *Config, event IServiceEvent) *Service {
+	if c.MaxConn <= 0 {
+		log.Fatal("config.max_conn is invalid")
+		return nil
+	}
+
+	if len(c.TcpHost) == 0 && len(c.WsHost) == 0 {
+		log.Fatal("must have one listner address")
+		return nil
+	}
+
 	messageCh := make(chan *Message, c.MaxConn*10000)
 
 	this_ := &Service{
@@ -122,13 +143,13 @@ func (this_ *Service) CurrConn() int32 {
 }
 
 func (this_ *Service) Run(nproc int) {
-	if !atomic.CompareAndSwapInt32(&this_.state, ServiceState_Stopped, ServiceState_Running) {
+	if !atomic.CompareAndSwapInt32(&this_.info.State, ServiceState_Stopped, ServiceState_Running) {
 		return
 	}
 
 	err := this_.event.OnInit(this_)
 	if err != nil {
-		log.Fatal("server inited failed: %v", err)
+		return
 	}
 
 	if nproc <= 0 {
@@ -137,7 +158,7 @@ func (this_ *Service) Run(nproc int) {
 
 	this_.wg.Add(nproc)
 	for i := 0; i < nproc; i++ {
-		go this_.messageProc(&this_.wg)
+		go this_.messageLoop(&this_.wg)
 	}
 
 	if this_.tcpSvr != nil {
@@ -163,16 +184,15 @@ func (this_ *Service) Run(nproc int) {
 	}
 
 	this_.wg.Wait()
-	this_.state = ServiceState_Stopped
 	this_.event.OnStopped(this_)
+	atomic.StoreInt32(&this_.info.State, ServiceState_Stopped)
 }
 
 func (this_ *Service) Stop() {
-	if !atomic.CompareAndSwapInt32(&this_.state, ServiceState_Running, ServiceState_Stopping) {
+	if !atomic.CompareAndSwapInt32(&this_.info.State, ServiceState_Running, ServiceState_Stopping) {
 		return
 	}
 
-	this_.info.State = ServiceState_Stopping
 	if this_.tcpSvr != nil {
 		this_.tcpSvr.Stop()
 	}
@@ -184,14 +204,11 @@ func (this_ *Service) Stop() {
 	close(this_.messageCh)
 }
 
-func (this_ *Service) messageProc(wg *sync.WaitGroup) {
-	var (
-		running = ServiceState_Running
-		state   = &this_.state
-	)
+func (this_ *Service) messageLoop(wg *sync.WaitGroup) {
+	var state = &this_.info.State
 
 	for msg := range this_.messageCh {
-		if atomic.LoadInt32(state) == running {
+		if atomic.LoadInt32(state) == ServiceState_Running {
 			this_.messageHandle(msg)
 		}
 		messagePool.Put(msg)
