@@ -138,6 +138,21 @@ func NewService(c *Config, event IServiceEvent) *Service {
 	return this_
 }
 
+func (this_ *Service) TcpHost() string {
+	if this_.tcpSvr != nil {
+		return this_.tcpSvr.host
+	}
+	return ""
+}
+
+func (this_ *Service) WsHost() string {
+	if this_.wsSvr != nil {
+		return this_.wsSvr.host
+	}
+
+	return ""
+}
+
 func (this_ *Service) CurrConn() int32 {
 	return int32(this_.conns.Count())
 }

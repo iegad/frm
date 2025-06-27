@@ -46,6 +46,14 @@ func (this_ *ConnContext) Protocol() Protocol {
 }
 
 func (this_ *ConnContext) RemoteAddr() string {
+	if len(this_.xForwardedFor) > 0 {
+		return this_.xForwardedFor
+	}
+
+	if len(this_.xRealIP) > 0 {
+		return this_.xRealIP
+	}
+
 	return this_.remoteAddr
 }
 
