@@ -1,11 +1,18 @@
 //go:build unix
 
-package io
+package nw
 
 import (
+	"errors"
+	"syscall"
+
 	"github.com/panjf2000/gnet/v2"
 	"golang.org/x/sys/unix"
 )
+
+func IsConnReset(err error) bool {
+	return errors.Is(err, syscall.ECONNRESET)
+}
 
 func GetSockRecvBuffer(c gnet.Conn) (int, error) {
 	fd := c.Fd()

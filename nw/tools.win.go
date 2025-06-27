@@ -1,12 +1,17 @@
 //go:build windows
 
-package io
+package nw
 
 import (
+	"errors"
 	"syscall"
 
 	"github.com/panjf2000/gnet/v2"
 )
+
+func IsConnReset(err error) bool {
+	return errors.Is(err, syscall.WSAECONNRESET) || errors.Is(err, syscall.WSAECONNABORTED)
+}
 
 func GetSockRecvBuffer(c gnet.Conn) (int, error) {
 	fd := syscall.Handle(c.Fd())

@@ -19,12 +19,10 @@ type WsClient struct {
 	timeout   time.Duration   // 读超时
 	conn      *websocket.Conn // 连接对象
 	realIP    string          // 真实IP
-	onEncrypt EncryptHandler  // 加密函数
-	onDecrypt DecryptHandler  // 解密函数
 	userData  any             // 用户数据
 }
 
-func NewWsClient(addr string, timeout time.Duration, onEncrypt EncryptHandler, onDecrypt DecryptHandler) (*WsClient, error) {
+func NewWsClient(addr string, timeout time.Duration) (*WsClient, error) {
 	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -102,13 +100,6 @@ func (this_ *WsClient) Write(data []byte) (int, error) {
 		}
 	}
 
-	if this_.onEncrypt != nil {
-		data, err = this_.onEncrypt(data)
-		if err != nil {
-			return -1, fmt.Errorf("WsClient[%v] encrypt error: %v", this_.RemoteAddr(), err)
-		}
-	}
-
 	err = this_.conn.WriteMessage(websocket.BinaryMessage, data)
 	if err != nil {
 		return -1, err
@@ -148,14 +139,7 @@ func (this_ *WsClient) Read() ([]byte, error) {
 	}
 
 	if t != websocket.BinaryMessage {
-		return nil, fmt.Errorf("WsClient[%v] ACTIVE close: %v", this_.RemoteAddr(), ErrWsMsgTypeInvalid)
-	}
-
-	if this_.onDecrypt != nil {
-		data, err = this_.onDecrypt(data)
-		if err != nil {
-			return nil, fmt.Errorf("WsClient[%v] decrypt error: %v", this_.RemoteAddr(), err)
-		}
+		return nil, fmt.Errorf("WsClient[%v] ACTIVE close: message type is invalid", this_.RemoteAddr())
 	}
 
 	this_.recvSeq++

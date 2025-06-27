@@ -26,7 +26,7 @@ var (
 func testClient(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	c, err := nw.NewWsClient(HOST, 0, nil, nil)
+	c, err := nw.NewWsClient(HOST, 0)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package nw
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,23 +15,21 @@ import (
 
 // TcpClient TCP客户端
 type TcpClient struct {
-	connected    int32          // 连接状态
-	tcpHeadBlend uint32         // tcp 消息头混合值
-	fd           int64          // 原始文件描述符
-	recvSeq      int64          // 接收序列
-	sendSeq      int64          // 发送序列
-	timeout      time.Duration  // 读超时
-	conn         *net.TCPConn   // 连接对象
-	reader       *bufio.Reader  // 读缓冲区
-	realIP       string         // 真实IP
-	onEncrypt    EncryptHandler // 加密函数
-	onDecrypt    DecryptHandler // 解密函数
-	hbuf         []byte         // tcp header buffer
-	dbuf         []byte         // tcp data buffer
-	userData     any            // 用户数据
+	connected    int32         // 连接状态
+	tcpHeadBlend uint32        // tcp 消息头混合值
+	fd           int64         // 原始文件描述符
+	recvSeq      int64         // 接收序列
+	sendSeq      int64         // 发送序列
+	timeout      time.Duration // 读超时
+	conn         *net.TCPConn  // 连接对象
+	reader       *bufio.Reader // 读缓冲区
+	realIP       string        // 真实IP
+	hbuf         []byte        // tcp header buffer
+	dbuf         []byte        // tcp data buffer
+	userData     any           // 用户数据
 }
 
-func NewTcpClient(host string, timeout time.Duration, blend uint32, onEncrypt EncryptHandler, onDecrypt DecryptHandler) (*TcpClient, error) {
+func NewTcpClient(host string, timeout time.Duration, blend uint32) (*TcpClient, error) {
 	if blend == 0 {
 		log.Fatal("blend cannot be zero")
 	}
@@ -74,8 +73,6 @@ func NewTcpClient(host string, timeout time.Duration, blend uint32, onEncrypt En
 		conn:         tcpConn,
 		reader:       bufio.NewReader(tcpConn),
 		realIP:       tcpConn.RemoteAddr().(*net.TCPAddr).IP.String(),
-		onEncrypt:    onEncrypt,
-		onDecrypt:    onDecrypt,
 		hbuf:         make([]byte, TCP_HEADER_SIZE),
 		dbuf:         make([]byte, TCP_MAX_SIZE),
 		userData:     nil,
@@ -113,7 +110,7 @@ func (this_ *TcpClient) Close() error {
 func (this_ *TcpClient) Write(data []byte) (int, error) {
 	var err error
 
-	if len(data) > TCP_MAX_SIZE {
+	if len(data) > int(TCP_MAX_SIZE) {
 		return -1, fmt.Errorf("TcpClient[%v] write data size[%d] exceeds max size[%d]", this_.RemoteAddr(), len(data), TCP_MAX_SIZE)
 	}
 
@@ -125,13 +122,6 @@ func (this_ *TcpClient) Write(data []byte) (int, error) {
 		err = this_.conn.SetWriteDeadline(time.Now().Add(this_.timeout))
 		if err != nil {
 			return -1, fmt.Errorf("TcpClient[%v] write deadline error: %v", this_.RemoteAddr(), err)
-		}
-	}
-
-	if this_.onEncrypt != nil {
-		data, err = this_.onEncrypt(data)
-		if err != nil {
-			return -1, fmt.Errorf("TcpClient[%v] encrypt error: %v", this_.RemoteAddr(), err)
 		}
 	}
 
@@ -167,7 +157,7 @@ func (this_ *TcpClient) Read() ([]byte, error) {
 
 	buflen := binary.BigEndian.Uint32(this_.hbuf) ^ this_.tcpHeadBlend
 	if buflen == 0 || buflen > TCP_MAX_SIZE {
-		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: %v", this_.RemoteAddr(), ErrInvalidBufSize)
+		return nil, fmt.Errorf("TcpClient[%v] ACTIVE close: invalid data size", this_.RemoteAddr())
 	}
 
 	_, err = io.ReadAtLeast(this_.reader, this_.dbuf, int(buflen))
@@ -197,4 +187,24 @@ func (this_ *TcpClient) GetRecvSeq() int64 {
 
 func (this_ *TcpClient) GetSendSeq() int64 {
 	return this_.sendSeq
+}
+
+func write(conn net.Conn, data []byte, timeout time.Duration, blend uint32) (int, error) {
+	if timeout > 0 {
+		err := conn.SetWriteDeadline(time.Now().Add(timeout))
+		if err != nil {
+			return -1, err
+		}
+	}
+
+	dlen := len(data)
+
+	if dlen > int(TCP_MAX_SIZE) {
+		return -1, errors.New("data too long")
+	}
+
+	wbuf := make([]byte, dlen+TCP_HEADER_SIZE)
+	binary.BigEndian.PutUint32(wbuf[:TCP_HEADER_SIZE], uint32(dlen)^blend)
+	copy(wbuf[TCP_HEADER_SIZE:], data)
+	return conn.Write(wbuf)
 }

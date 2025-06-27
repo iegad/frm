@@ -6,36 +6,36 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/gox/frm/io"
 	"github.com/gox/frm/log"
+	"github.com/gox/frm/nw"
 )
 
 type echoHandler struct{}
 
-func (this_ *echoHandler) OnInit(s *io.Service) error {
+func (this_ *echoHandler) OnInit(s *nw.Service) error {
 	log.Debug("server is running...")
 	return nil
 }
 
-func (this_ *echoHandler) OnConnected(c *io.ConnContext) error {
+func (this_ *echoHandler) OnConnected(c *nw.ConnContext) error {
 	log.Debug("[%d:%s] has connected", c.Fd(), c.RemoteAddr())
 	return nil
 }
 
-func (this_ *echoHandler) OnDisconnected(c *io.ConnContext) {
+func (this_ *echoHandler) OnDisconnected(c *nw.ConnContext) {
 	log.Debug("[%d:%s] has disconnected", c.Fd(), c.RemoteAddr())
 }
 
-func (this_ *echoHandler) OnStopped(s *io.Service) {
+func (this_ *echoHandler) OnStopped(s *nw.Service) {
 	log.Debug("server has stopped...: %v", s.CurrConn())
 }
 
-func (this_ *echoHandler) OnData(c *io.ConnContext, data []byte) error {
+func (this_ *echoHandler) OnData(c *nw.ConnContext, data []byte) error {
 	return c.Write(data)
 }
 
 func main() {
-	server := io.NewService(&io.Config{
+	server := nw.NewService(&nw.Config{
 		TcpHost:   ":9090",
 		WsHost:    ":9091",
 		MaxConn:   10000,
