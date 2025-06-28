@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 
 	"github.com/gox/frm/log"
@@ -52,5 +51,5 @@ func main() {
 		server.Stop()
 	}()
 
-	server.Run(runtime.NumCPU())
+	server.Run()
 }

@@ -52,9 +52,6 @@ func Post(url string, req string, rsp any) error {
 }
 
 func PostRaw(url string, req string) (string, error) {
-	log.Debug("POST: %v", url)
-	log.Debug("PARAMS: %v", req)
-
 	ret, err := http.Post(url, "application/x-www-form-urlencoded", strings.NewReader(req))
 	if err != nil {
 		return "", err

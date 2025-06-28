@@ -8,12 +8,12 @@ import (
 
 type WorkerPool struct {
 	count int
-	wkrs  []*utils.Worker[Message]
+	wkrs  []*utils.Worker[message]
 	wg    *sync.WaitGroup
 }
 
-func NewWorkerPool(n int, handler utils.WorkerHandler[Message], wg *sync.WaitGroup) *WorkerPool {
-	wkrs := []*utils.Worker[Message]{}
+func NewWorkerPool(n int, handler utils.WorkerHandler[message], wg *sync.WaitGroup) *WorkerPool {
+	wkrs := []*utils.Worker[message]{}
 
 	for i := 0; i < n; i++ {
 		wkrs = append(wkrs, utils.NewWorker(handler))
@@ -42,6 +42,6 @@ func (this_ *WorkerPool) Stop() {
 	}
 }
 
-func (this_ *WorkerPool) Push(flag int, msg *Message) {
+func (this_ *WorkerPool) Push(flag int, msg *message) {
 	this_.wkrs[flag%this_.count].Push(msg)
 }

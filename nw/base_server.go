@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -19,6 +18,7 @@ type IServer interface {
 	Proto() Protocol                  // 协议
 	Host() string                     // 监听地址
 	Write(*ConnContext, []byte) error // 写数据
+	PutMessage(*message)              // 将消息对象放回池中
 }
 
 // baseServer 基类
@@ -33,6 +33,7 @@ type baseServer struct {
 	cctxPool sync.Pool   // ConnContext 对象池
 }
 
+// newBaseServer 构造函数
 func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 	return &baseServer{
 		owner:    owner,
@@ -47,21 +48,25 @@ func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 	}
 }
 
+// Proto 协议
 func (this_ *baseServer) Proto() Protocol {
 	return Protocol_None
 }
 
+// Host 监听地址
 func (this_ *baseServer) Host() string {
 	return this_.host
 }
 
+// OnBoot 启动事件
 func (this_ *baseServer) OnBoot(eng gnet.Engine) gnet.Action {
 	this_.eng = eng
 	return gnet.None
 }
 
+// OnOpen 客户端连接事件
 func (this_ *baseServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
-	if atomic.LoadInt32(&this_.owner.currConn) >= this_.owner.info.MaxConn {
+	if this_.owner.conns.Count() >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
 	}
 
@@ -74,13 +79,13 @@ func (this_ *baseServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
 		return nil, gnet.Close
 	}
 
-	atomic.AddInt32(&this_.owner.currConn, 1)
+	// 将连接上下文放入 conns 集中
 	this_.owner.conns.Set(cctx.Fd(), cctx)
 	return nil, gnet.None
 }
 
+// OnClose 客户端连接断开事件
 func (this_ *baseServer) OnClose(c gnet.Conn, err error) gnet.Action {
-	atomic.AddInt32(&this_.owner.currConn, -1)
 	cctx := c.Context().(*ConnContext)
 
 	this_.owner.conns.Remove(cctx.Fd())
@@ -89,9 +94,12 @@ func (this_ *baseServer) OnClose(c gnet.Conn, err error) gnet.Action {
 	return gnet.None
 }
 
+// OnTick 定时任务, 主要作用是心跳检查
 func (this_ *baseServer) OnTick() (time.Duration, gnet.Action) {
-	tnow := time.Now().Unix()
-	timeout := this_.owner.info.Timeout
+	var (
+		tnow    = time.Now().Unix()
+		timeout = this_.owner.info.Timeout
+	)
 
 	this_.owner.conns.Range(func(fd int, cctx *ConnContext) bool {
 		if tnow-cctx.lastUpdate > timeout {
@@ -103,23 +111,33 @@ func (this_ *baseServer) OnTick() (time.Duration, gnet.Action) {
 	return time.Second * 15, gnet.None
 }
 
+// Stop 停止服务
 func (this_ *baseServer) Stop() {
 	this_.eng.Stop(context.TODO())
 }
 
-func (this_ *baseServer) Write(c *ConnContext, data []byte) error {
-	return this_.server.Write(c, data)
+// Write 向客户端发送数据
+func (this_ *baseServer) Write(cctx *ConnContext, data []byte) error {
+	return this_.server.Write(cctx, data)
 }
 
+// PutMessage 将消息对象放回池中
+func (this_ *baseServer) PutMessage(msg *message) {
+	this_.server.PutMessage(msg)
+}
+
+// getConnContext 从 cctxPool 对象池中获取数据, 目的是减少GC开的销
 func (this_ *baseServer) getConnContext() *ConnContext {
 	return this_.cctxPool.Get().(*ConnContext)
 }
 
+// putConnContext 将cctx 对象还给 cctxPool 对象池
 func (this_ *baseServer) putConnContext(cctx *ConnContext) {
 	cctx.Reset()
 	this_.cctxPool.Put(cctx)
 }
 
+// Run 启动服务
 func Run(server IServer) error {
 	return gnet.Run(server, server.Host(),
 		gnet.WithMulticore(true),
@@ -128,7 +146,7 @@ func Run(server IServer) error {
 		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
 		gnet.WithSocketSendBuffer(SEND_BUF_SIZE),
 		gnet.WithSocketRecvBuffer(RECV_BUF_SIZE),
-		gnet.WithLogLevel(logging.DebugLevel),
+		gnet.WithLogLevel(logging.InfoLevel),
 		gnet.WithTicker(true),
 		gnet.WithTCPKeepAlive(time.Second*30),
 		gnet.WithTCPKeepCount(2),

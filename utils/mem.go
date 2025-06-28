@@ -37,12 +37,12 @@ func Clone[T any](obj *T) T {
 	return *res
 }
 
-type pool[T any] struct {
+type Pool[T any] struct {
 	pool sync.Pool
 }
 
-func NewPool[T any]() *pool[T] {
-	return &pool[T]{
+func NewPool[T any]() *Pool[T] {
+	return &Pool[T]{
 		pool: sync.Pool{
 			New: func() interface{} {
 				return new(T)
@@ -51,12 +51,12 @@ func NewPool[T any]() *pool[T] {
 	}
 }
 
-func (this_ *pool[T]) Get() *T {
+func (this_ *Pool[T]) Get() *T {
 	obj := this_.pool.Get().(*T)
 	return obj
 }
 
-func (this_ *pool[T]) Put(v *T) {
+func (this_ *Pool[T]) Put(v *T) {
 	if v != nil {
 		Bzero(v)
 		this_.pool.Put(v)

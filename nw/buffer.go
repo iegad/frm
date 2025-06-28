@@ -18,13 +18,6 @@ func NewBuffer() *Buffer {
 	}
 }
 
-func NewBufferWithData(buf []byte) *Buffer {
-	return &Buffer{
-		buf:    buf,
-		offset: len(buf),
-	}
-}
-
 // Write 向缓冲区写入数据
 func (this_ *Buffer) Write(data []byte) (int, error) {
 	blen := len(this_.buf)
@@ -41,8 +34,8 @@ func (this_ *Buffer) Write(data []byte) (int, error) {
 	return dlen, nil
 }
 
-// WriteUint32 向缓冲区写在大端序 uint32 值
-func (this_ *Buffer) WriteUint32(v uint32) {
+// WriteUint32BE 向缓冲区写在大端序 uint32 值
+func (this_ *Buffer) WriteUint32BE(v uint32) {
 	need := this_.offset + 4
 	if len(this_.buf) < need {
 		newCap := len(this_.buf) * 2
@@ -61,6 +54,10 @@ func (this_ *Buffer) WriteUint32(v uint32) {
 // Bytes 获取缓冲区中的数据
 func (this_ *Buffer) Bytes() []byte {
 	return this_.buf[:this_.offset]
+}
+
+func (this_ *Buffer) Buf() []byte {
+	return this_.buf
 }
 
 // Reset 重置缓冲区

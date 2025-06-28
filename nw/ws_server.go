@@ -9,15 +9,20 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/gox/frm/log"
+	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 )
 
 type wsServer struct {
 	baseServer
+	msgPool *utils.Pool[message]
 }
 
 func newWsServer(owner *Service, c *Config) *wsServer {
-	this_ := &wsServer{}
+	this_ := &wsServer{
+		msgPool: utils.NewPool[message](),
+	}
+
 	this_.baseServer = *newBaseServer(owner, this_, c.WsHost)
 	return this_
 }
@@ -42,13 +47,17 @@ func (this_ *wsServer) Write(cctx *ConnContext, data []byte) error {
 	buf := this_.wbufPool.Get()
 	wsutil.WriteMessage(buf, ws.StateServerSide, ws.OpBinary, data)
 
-	return cctx.asyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
+	return cctx.c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {
 		if err != nil {
 			log.Error("AsyncWrite failed: %v", err)
 		}
 		this_.wbufPool.Put(buf)
 		return nil
 	})
+}
+
+func (this_ *wsServer) PutMessage(msg *message) {
+	this_.msgPool.Put(msg)
 }
 
 func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
@@ -81,10 +90,12 @@ func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 
 func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 	// 读取数据
+	var err error
+
 	n := cctx.c.InboundBuffered()
 	data, _ := cctx.c.Peek(n)
 
-	data, err := wsutil.ReadClientBinary(bytes.NewBuffer(data))
+	data, err = wsutil.ReadClientBinary(bytes.NewBuffer(data))
 	if err != nil {
 		if err == io.ErrUnexpectedEOF || err == io.EOF || errors.Is(err, io.ErrShortBuffer) {
 			return gnet.None
@@ -92,12 +103,11 @@ func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 		return gnet.Close
 	}
 
+	msg := this_.msgPool.Get()
+	msg.Init(cctx, data)
+
 	cctx.c.Discard(n)
 	cctx.lastUpdate = time.Now().Unix()
-
-	msg := messagePool.Get()
-	msg.Context = cctx
-	msg.Data = data
 
 	this_.owner.messageCh <- msg
 	return gnet.None

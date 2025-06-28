@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/gox/frm/log"
 	"github.com/gox/frm/utils"
@@ -41,47 +42,41 @@ const (
 
 // 常量定义
 const (
-	RECV_BUF_SIZE = 1024 * 1024 * 2 // 读缓冲区
-	SEND_BUF_SIZE = 1024 * 1024 * 2 // 写缓冲区
+	RECV_BUF_SIZE = 1024 * 1024 * 2 // 读缓冲区 2M
+	SEND_BUF_SIZE = 1024 * 1024 * 2 // 写缓冲区 2M
 
-	TCP_HEADER_SIZE = 4                       // 消息头长度
-	TCP_MAX_SIZE    = uint32(1024 * 1024 * 2) // 消息体最大长度
+	TCP_HEADER_SIZE  = int(unsafe.Sizeof(uint32(0))) // 消息头长度
+	MESSAGE_MAX_SIZE = uint32(1024 * 1024 * 2)       // 消息体最大长度
+
+	DEFAULT_MAX_CONN = 10000
 )
-
-// Message 消息
-type Message struct {
-	Context *ConnContext
-	Data    []byte
-}
-
-var messagePool = utils.NewPool[Message]()
 
 // IServiceEvent 服务事件
 type IServiceEvent interface {
-	OnInit(*Service) error
-	OnConnected(*ConnContext) error
-	OnDisconnected(*ConnContext)
-	OnStopped(*Service)
-	OnData(*ConnContext, []byte) error
+	OnInit(*Service) error             // 初始化事件
+	OnConnected(*ConnContext) error    // 客户端连接事件
+	OnDisconnected(*ConnContext)       // 客户端连接断开事件
+	OnStopped(*Service)                // 服务停止事件
+	OnData(*ConnContext, []byte) error // 消息事件
 }
 
 // Config 服务配置
 type Config struct {
-	TcpHost   string `json:"tcp_host,omitempty"`
-	WsHost    string `json:"ws_host,omitempty"`
-	MaxConn   int32  `json:"max_conn"`
-	HeadBlend uint32 `json:"-"`
-	Timeout   int64  `json:"timeout"`
+	TcpHost   string `json:"tcp_host,omitempty"` // tcp 监听地址
+	WsHost    string `json:"ws_host,omitempty"`  // websocket 监听地址
+	HeadBlend uint32 `json:"-"`                  // tcp 消息头混合值
+	MaxConn   int    `json:"max_conn"`           // 最大连接数
+	Timeout   int64  `json:"timeout"`            // 客户端超时值
 }
 
 // serverInfo 服务信息
 type serverInfo struct {
-	State    int32  `json:"state"`
-	MaxConn  int32  `json:"max_conn"`
-	CurrConn int32  `json:"curr_conn"`
-	Timeout  int64  `json:"timeout"`
-	TcpHost  string `json:"tcp_host,omitempty"`
-	WsHost   string `json:"ws_host,omitempty"`
+	State    int32  `json:"state"`              // 服务状态
+	CurrConn int    `json:"curr_conn"`          // 当前连接数
+	MaxConn  int    `json:"max_conn"`           // 最大连接数
+	Timeout  int64  `json:"timeout"`            // 超时值
+	TcpHost  string `json:"tcp_host,omitempty"` // cp 监听地址
+	WsHost   string `json:"ws_host,omitempty"`  // websocket 监听地址
 }
 
 func (this_ *serverInfo) String() string {
@@ -91,28 +86,26 @@ func (this_ *serverInfo) String() string {
 
 // Service 网络服务
 type Service struct {
-	currConn  int32                             // 当前连接数
 	info      *serverInfo                       // 服务信息
 	tcpSvr    *tcpServer                        // tcp服务
 	wsSvr     *wsServer                         // websocket服务
 	conns     *utils.SafeMap[int, *ConnContext] // 客户端连接池
-	messageCh chan *Message                     // 消息管道
+	messageCh chan *message                     // 消息管道
 	event     IServiceEvent                     // 事件
 	wg        sync.WaitGroup                    // 协程同步
 }
 
 func NewService(c *Config, event IServiceEvent) *Service {
-	if c.MaxConn <= 0 {
-		log.Fatal("config.max_conn is invalid")
-		return nil
-	}
-
 	if len(c.TcpHost) == 0 && len(c.WsHost) == 0 {
 		log.Fatal("must have one listner address")
 		return nil
 	}
 
-	messageCh := make(chan *Message, c.MaxConn*10000)
+	if c.MaxConn <= 0 {
+		c.MaxConn = DEFAULT_MAX_CONN
+	}
+
+	messageCh := make(chan *message, c.MaxConn*10000)
 
 	this_ := &Service{
 		conns:     utils.NewSafeMap[int, *ConnContext](),
@@ -138,13 +131,21 @@ func NewService(c *Config, event IServiceEvent) *Service {
 	return this_
 }
 
+func (this_ *Service) String() string {
+	this_.info.CurrConn = this_.conns.Count()
+	return this_.info.String()
+}
+
+// TcpHost TCP 监听地址
 func (this_ *Service) TcpHost() string {
 	if this_.tcpSvr != nil {
 		return this_.tcpSvr.host
 	}
+
 	return ""
 }
 
+// WsHost websocket 监听地址
 func (this_ *Service) WsHost() string {
 	if this_.wsSvr != nil {
 		return this_.wsSvr.host
@@ -153,11 +154,13 @@ func (this_ *Service) WsHost() string {
 	return ""
 }
 
-func (this_ *Service) CurrConn() int32 {
-	return int32(this_.conns.Count())
+// CurrConn 当前在线人数
+func (this_ *Service) CurrConn() int {
+	return this_.conns.Count()
 }
 
-func (this_ *Service) Run(nproc int) {
+// Run 启动服务
+func (this_ *Service) Run() {
 	if !atomic.CompareAndSwapInt32(&this_.info.State, ServiceState_Stopped, ServiceState_Running) {
 		return
 	}
@@ -167,9 +170,7 @@ func (this_ *Service) Run(nproc int) {
 		return
 	}
 
-	if nproc <= 0 {
-		nproc = runtime.NumCPU()
-	}
+	nproc := runtime.NumCPU()
 
 	this_.wg.Add(nproc)
 	for i := 0; i < nproc; i++ {
@@ -203,6 +204,7 @@ func (this_ *Service) Run(nproc int) {
 	atomic.StoreInt32(&this_.info.State, ServiceState_Stopped)
 }
 
+// Stop 停止服务
 func (this_ *Service) Stop() {
 	if !atomic.CompareAndSwapInt32(&this_.info.State, ServiceState_Running, ServiceState_Stopping) {
 		return
@@ -219,6 +221,7 @@ func (this_ *Service) Stop() {
 	close(this_.messageCh)
 }
 
+// messageLoop 消息轮巡
 func (this_ *Service) messageLoop(wg *sync.WaitGroup) {
 	var state = &this_.info.State
 
@@ -226,15 +229,16 @@ func (this_ *Service) messageLoop(wg *sync.WaitGroup) {
 		if atomic.LoadInt32(state) == ServiceState_Running {
 			this_.messageHandle(msg)
 		}
-		messagePool.Put(msg)
+		msg.cctx.server.PutMessage(msg)
 	}
 
 	wg.Done()
 }
 
-func (this_ *Service) messageHandle(msg *Message) {
-	err := this_.event.OnData(msg.Context, msg.Data)
+// messageHandle 消息处理
+func (this_ *Service) messageHandle(msg *message) {
+	err := this_.event.OnData(msg.cctx, msg.Data())
 	if err != nil {
-		msg.Context.Close()
+		msg.cctx.Close()
 	}
 }
