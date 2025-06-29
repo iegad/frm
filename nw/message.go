@@ -14,7 +14,9 @@ type message struct {
 
 // release 释放消息对象到对象池中
 func (this_ *message) release() {
-	this_.msgPool.Put(this_)
+	if this_.msgPool != nil {
+		this_.msgPool.Put(this_)
+	}
 }
 
 // Data 获取消息数据
@@ -51,6 +53,7 @@ func (this_ *messagePool) Get(cctx *ConnContext, data []byte) *message {
 	msg := this_.pool.Get().(*message)
 	msg.cctx = cctx
 	msg.len = len(data)
+	msg.msgPool = this_
 	if msg.buf == nil || cap(msg.buf) < msg.len {
 		msg.buf = make([]byte, msg.len)
 	}
@@ -64,6 +67,7 @@ func (this_ *messagePool) GetRef(cctx *ConnContext, data []byte) *message {
 	msg.cctx = cctx
 	msg.len = len(data)
 	msg.buf = data
+	msg.msgPool = this_
 	return msg
 }
 

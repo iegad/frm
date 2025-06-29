@@ -52,10 +52,6 @@ func (this_ *wsServer) Write(cctx *ConnContext, data []byte) error {
 	})
 }
 
-func (this_ *wsServer) PutMessage(msg *message) {
-	this_.msgPool.Put(msg)
-}
-
 func (this_ *wsServer) upgrade(cctx *ConnContext) gnet.Action {
 	u := ws.Upgrader{
 		OnHeader: func(key, value []byte) error {
