@@ -95,6 +95,11 @@ type Service struct {
 	wg        sync.WaitGroup                    // 协程同步
 }
 
+// NewService 创建一个新的 Service
+//   - c: 服务配置
+//   - event: 服务事件接口
+//
+// 注意: 必须至少提供一个监听地址 (TcpHost 或 WsHost)
 func NewService(c *Config, event IServiceEvent) *Service {
 	if len(c.TcpHost) == 0 && len(c.WsHost) == 0 {
 		log.Fatal("must have one listner address")
@@ -229,7 +234,7 @@ func (this_ *Service) messageLoop(wg *sync.WaitGroup) {
 		if atomic.LoadInt32(state) == ServiceState_Running {
 			this_.messageHandle(msg)
 		}
-		msg.cctx.server.PutMessage(msg)
+		msg.release()
 	}
 
 	wg.Done()
@@ -237,7 +242,7 @@ func (this_ *Service) messageLoop(wg *sync.WaitGroup) {
 
 // messageHandle 消息处理
 func (this_ *Service) messageHandle(msg *message) {
-	err := this_.event.OnData(msg.cctx, msg.Data())
+	err := this_.event.OnData(msg.cctx, msg.data())
 	if err != nil {
 		msg.cctx.Close()
 	}

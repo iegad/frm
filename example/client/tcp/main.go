@@ -45,17 +45,17 @@ func testClient(wg *sync.WaitGroup) {
 
 		atomic.AddInt64(&ssize, int64(wlen))
 
-		rdata, err := c.Read()
+		rbuf, err := c.Read()
 		if err != nil {
 			log.Error(err)
 			break
 		}
 
-		if str != string(rdata) {
-			log.Fatal(string(rdata))
+		if str != string(rbuf.Bytes()) {
+			log.Fatal(string(rbuf.Bytes()))
 		}
 
-		atomic.AddInt64(&rsize, int64(len(rdata)))
+		atomic.AddInt64(&rsize, int64(len(rbuf.Bytes())))
 		atomic.AddInt64(&ntime, 1)
 	}
 }

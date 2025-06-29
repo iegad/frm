@@ -9,19 +9,15 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/gox/frm/log"
-	"github.com/gox/frm/utils"
 	"github.com/panjf2000/gnet/v2"
 )
 
 type wsServer struct {
 	baseServer
-	msgPool *utils.Pool[message]
 }
 
 func newWsServer(owner *Service, c *Config) *wsServer {
-	this_ := &wsServer{
-		msgPool: utils.NewPool[message](),
-	}
+	this_ := &wsServer{}
 
 	this_.baseServer = *newBaseServer(owner, this_, c.WsHost)
 	return this_
@@ -103,9 +99,7 @@ func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 		return gnet.Close
 	}
 
-	msg := this_.msgPool.Get()
-	msg.Init(cctx, data)
-
+	msg := this_.msgPool.GetRef(cctx, data)
 	cctx.c.Discard(n)
 	cctx.lastUpdate = time.Now().Unix()
 

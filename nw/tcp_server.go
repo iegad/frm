@@ -14,7 +14,6 @@ import (
 type tcpServer struct {
 	baseServer
 	headBlend uint32
-	msgPool   messagePool // 消息对象池
 }
 
 // NewTcpServer 创建一个新的 TCP 服务器
@@ -26,7 +25,6 @@ type tcpServer struct {
 func newTcpServer(owner *Service, c *Config) *tcpServer {
 	this_ := &tcpServer{
 		headBlend: c.HeadBlend,
-		msgPool:   newMessagePool(),
 	}
 
 	this_.baseServer = *newBaseServer(owner, this_, c.TcpHost)
@@ -68,6 +66,7 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 	cctx := c.Context().(*ConnContext)
 	cctx.lastUpdate = time.Now().Unix()
 
+	// 使用baseServer的消息池
 	msg := this_.msgPool.Get(cctx, data[TCP_HEADER_SIZE:])
 	this_.owner.messageCh <- msg
 	return gnet.None
@@ -88,8 +87,4 @@ func (this_ *tcpServer) Write(cctx *ConnContext, data []byte) error {
 		this_.wbufPool.Put(buf)
 		return nil
 	})
-}
-
-func (this_ *tcpServer) PutMessage(msg *message) {
-	this_.msgPool.Put(msg)
 }

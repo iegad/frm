@@ -11,6 +11,8 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
+const HEART_BEAT_INTERVAL = 15 * time.Second // 心跳间隔时间
+
 // IServer 服务接口
 type IServer interface {
 	gnet.EventHandler
@@ -18,7 +20,6 @@ type IServer interface {
 	Proto() Protocol                  // 协议
 	Host() string                     // 监听地址
 	Write(*ConnContext, []byte) error // 写数据
-	PutMessage(*message)              // 将消息对象放回池中
 }
 
 // baseServer 基类
@@ -28,6 +29,7 @@ type baseServer struct {
 
 	owner    *Service    // 所属服务
 	wbufPool *BufferPool // 写对象池
+	msgPool  messagePool // 消息对象池
 	server   IServer     // 实际的服务
 	host     string      // 监听地址
 	cctxPool sync.Pool   // ConnContext 对象池
@@ -38,6 +40,7 @@ func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 	return &baseServer{
 		owner:    owner,
 		wbufPool: NewBufferPool(),
+		msgPool:  newMessagePool(),
 		server:   server,
 		host:     fmt.Sprintf("tcp://%v", host),
 		cctxPool: sync.Pool{
@@ -108,7 +111,7 @@ func (this_ *baseServer) OnTick() (time.Duration, gnet.Action) {
 		return true
 	})
 
-	return time.Second * 15, gnet.None
+	return HEART_BEAT_INTERVAL, gnet.None
 }
 
 // Stop 停止服务
@@ -119,11 +122,6 @@ func (this_ *baseServer) Stop() {
 // Write 向客户端发送数据
 func (this_ *baseServer) Write(cctx *ConnContext, data []byte) error {
 	return this_.server.Write(cctx, data)
-}
-
-// PutMessage 将消息对象放回池中
-func (this_ *baseServer) PutMessage(msg *message) {
-	this_.server.PutMessage(msg)
 }
 
 // getConnContext 从 cctxPool 对象池中获取数据, 目的是减少GC开的销
