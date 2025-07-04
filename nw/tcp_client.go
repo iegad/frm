@@ -19,9 +19,9 @@ type AsyncTCPClient struct {
 	closeOnce sync.Once
 }
 
-func NewAsyncTCPClient(addr string, timeout time.Duration) (*AsyncTCPClient, error) {
+func NewAsyncTCPClient(host string, timeout time.Duration) (*AsyncTCPClient, error) {
 	dialer := net.Dialer{Timeout: timeout}
-	conn, err := dialer.Dial("tcp", addr)
+	conn, err := dialer.Dial("tcp", host)
 	if err != nil {
 		return nil, err
 	}

@@ -17,10 +17,11 @@ const (
 )
 
 type Config struct {
-	Timeout   int64  `yaml:"timeout(s)"`
-	AccessID  string `yaml:"access_id"`
-	AccessKey string `yaml:"access_key"`
-	Region    string `yaml:"region"`
+	Timeout    int64    `yaml:"timeout(s)"`  // 超时时间，单位秒
+	AccessID   string   `yaml:"access_id"`   // AccessKey ID
+	AccessKey  string   `yaml:"access_key"`  // AccessKey Secret
+	Region     string   `yaml:"region"`      // 区域
+	SenderList []string `yaml:"sender_list"` // 发件人地址列表
 }
 
 type awsses struct {
@@ -60,7 +61,7 @@ func Init(conf *Config) error {
 	return nil
 }
 
-func (this_ *awsses) SendEmail(recver, sender, title, content string) error {
+func (this_ *awsses) SendEmail(recver, sender, title, content string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Duration(this_.cfg.Timeout)*time.Second)
 	defer cancel()
 
@@ -90,6 +91,10 @@ func (this_ *awsses) SendEmail(recver, sender, title, content string) error {
 		FromEmailAddress: aws.String(sender),
 	}
 
-	_, err := this_.c.SendEmail(ctx, input)
-	return err
+	out, err := this_.c.SendEmail(ctx, input)
+	if err != nil {
+		return "", err
+	}
+
+	return *out.MessageId, nil
 }

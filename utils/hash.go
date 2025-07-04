@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
+	"hash/fnv"
 	"math/rand"
 )
 
@@ -32,4 +33,14 @@ func SHA256Hex(raw string) string {
 // 随机生成 [min, max] 的随机数
 func RandomRange(r *rand.Rand, min, max int64) int64 {
 	return r.Int63n(max-min+1) + min
+}
+
+func Str2Uint64(s string) uint64 {
+	if len(s) == 0 {
+		return 0
+	}
+
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return h.Sum64()
 }

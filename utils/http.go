@@ -16,8 +16,11 @@ func HttpPostJson(url string, jsonData []byte) ([]byte, error) {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	c := &http.Client{}
+	c := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	data, err := c.Do(req)
+
 	if err != nil {
 		return nil, err
 	}

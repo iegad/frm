@@ -18,11 +18,9 @@ import (
 	"github.com/gox/frm/utils"
 )
 
-var (
-	checkImageMap = map[string]bool{
-		"png": true, "jpeg": true, "jpg": true,
-	}
-)
+var checkImageMap = map[string]bool{
+	"png": true, "jpeg": true, "jpg": true,
+}
 
 type Config struct {
 	Timeout   int64  `yaml:"timeout(s)"`
@@ -165,24 +163,33 @@ func (this_ *awss3) PutObjectByFile(key string, file io.Reader) error {
 	return err
 }
 
-func (this_ *awss3) PutObjectByData(key string, data []byte) error {
+func (this_ *awss3) PutObjectByData(key string, data []byte, resize bool) error {
+	var err error
+
 	input := &s3.PutObjectInput{
 		Bucket:            aws.String(this_.cfg.Bucket),
 		Key:               aws.String(key),
-		Body:              bytes.NewReader(data),
 		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
 	}
 
 	suffix := utils.GetFileSuffix(key)
 	if checkImage(suffix) {
 		input.ContentType = aws.String(fmt.Sprintf("image/%v", suffix))
+		if resize {
+			data, err = utils.ResizeImage(data)
+			if err != nil {
+				return err
+			}
+		}
 	}
+
+	input.Body = bytes.NewReader(data)
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Duration(this_.cfg.Timeout)*time.Second)
 	defer cancel()
 
 	uper := manager.NewUploader(this_.c)
-	_, err := uper.Upload(ctx, input)
+	_, err = uper.Upload(ctx, input)
 	if err != nil {
 		return err
 	}
