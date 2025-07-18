@@ -12,6 +12,7 @@ type MysqlConfig struct {
 	Addr     string `yaml:"addr"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	Timeout  int64  `yaml:"timeout"`
 }
 
 func NewSql(c *MysqlConfig) (*sql.DB, error) {
@@ -30,6 +31,7 @@ func NewSql(c *MysqlConfig) (*sql.DB, error) {
 		AllowNativePasswords: true,
 		CheckConnLiveness:    true,
 		ParseTime:            true,
+		Timeout:              time.Duration(c.Timeout) * time.Second,
 	}
 
 	db, err := sql.Open("mysql", mc.FormatDSN())

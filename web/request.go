@@ -11,10 +11,10 @@ import (
 )
 
 type BasicRequest struct {
-	UserID     *int32      `json:"user_id,omitempty"`
-	Token      *string     `json:"token,omitempty"`
-	Idempotent *int64      `json:"idempotent,omitempty"`
-	Data       interface{} `json:"data,omitempty"`
+	UserID     *int64  `json:"user_id,omitempty"`
+	CheckCode  *string `json:"check_code,omitempty"`
+	Idempotent *int64  `json:"idempotent,omitempty"`
+	Data       *string `json:"data,omitempty"`
 }
 
 func PostJSON(url string, req, rsp any) error {
