@@ -48,7 +48,7 @@ const (
 	TCP_HEADER_SIZE  = int(unsafe.Sizeof(uint32(0))) // 消息头长度
 	MESSAGE_MAX_SIZE = uint32(1024 * 1024 * 2)       // 消息体最大长度
 
-	DEFAULT_MAX_CONN = 10000
+	DEFAULT_CHAN_SIZE = 1000000
 )
 
 // IServiceEvent 服务事件
@@ -86,13 +86,13 @@ func (this_ *serverInfo) String() string {
 
 // Service 网络服务
 type Service struct {
-	info      *serverInfo                       // 服务信息
-	tcpSvr    *tcpServer                        // tcp服务
-	wsSvr     *wsServer                         // websocket服务
-	conns     *utils.SafeMap[int, *ConnContext] // 客户端连接池
-	messageCh chan *message                     // 消息管道
-	event     IServiceEvent                     // 事件
-	wg        sync.WaitGroup                    // 协程同步
+	info    *serverInfo                       // 服务信息
+	tcpSvr  *tcpServer                        // tcp服务
+	wsSvr   *wsServer                         // websocket服务
+	conns   *utils.SafeMap[int, *ConnContext] // 客户端连接池
+	wkrPool []*messageWorker                  // 消息工作池
+	event   IServiceEvent                     // 事件
+	wg      sync.WaitGroup                    // 协程同步
 }
 
 // NewService 创建一个新的 Service
@@ -102,19 +102,17 @@ type Service struct {
 // 注意: 必须至少提供一个监听地址 (TcpHost 或 WsHost)
 func NewService(c *Config, event IServiceEvent) *Service {
 	if len(c.TcpHost) == 0 && len(c.WsHost) == 0 {
-		log.Fatal("must have one listner address")
+		log.Fatal("must bind a listen address")
 		return nil
 	}
 
-	if c.MaxConn <= 0 {
-		c.MaxConn = DEFAULT_MAX_CONN
+	if c.MaxConn < 0 {
+		c.MaxConn = 0
 	}
 
-	messageCh := make(chan *message, c.MaxConn*10000)
-
+	// 创建服务对象
 	this_ := &Service{
-		conns:     utils.NewSafeMap[int, *ConnContext](),
-		messageCh: messageCh,
+		conns: utils.NewSafeMap[int, *ConnContext](),
 		info: &serverInfo{
 			State:   ServiceState_Stopped,
 			MaxConn: c.MaxConn,
@@ -123,6 +121,12 @@ func NewService(c *Config, event IServiceEvent) *Service {
 			Timeout: c.Timeout,
 		},
 		event: event,
+	}
+
+	// 创建消息工作池
+	n := runtime.NumCPU()
+	for i := 0; i < n; i++ {
+		this_.wkrPool = append(this_.wkrPool, newMessageWorker(this_.messageHandle))
 	}
 
 	if len(c.TcpHost) > 0 {
@@ -170,16 +174,14 @@ func (this_ *Service) Run() {
 		return
 	}
 
+	this_.wg.Add(len(this_.wkrPool))
+	for _, wkr := range this_.wkrPool {
+		go wkr.run(&this_.wg)
+	}
+
 	err := this_.event.OnInit(this_)
 	if err != nil {
 		return
-	}
-
-	nproc := runtime.NumCPU()
-
-	this_.wg.Add(nproc)
-	for i := 0; i < nproc; i++ {
-		go this_.messageLoop(&this_.wg)
 	}
 
 	if this_.tcpSvr != nil {
@@ -223,21 +225,9 @@ func (this_ *Service) Stop() {
 		this_.wsSvr.Stop()
 	}
 
-	close(this_.messageCh)
-}
-
-// messageLoop 消息轮巡
-func (this_ *Service) messageLoop(wg *sync.WaitGroup) {
-	var state = &this_.info.State
-
-	for msg := range this_.messageCh {
-		if atomic.LoadInt32(state) == ServiceState_Running {
-			this_.messageHandle(msg)
-		}
-		msg.release()
+	for _, wkr := range this_.wkrPool {
+		wkr.stop()
 	}
-
-	wg.Done()
 }
 
 // messageHandle 消息处理
@@ -246,4 +236,9 @@ func (this_ *Service) messageHandle(msg *message) {
 	if err != nil {
 		msg.cctx.Close()
 	}
+	msg.release()
+}
+
+func (this_ *Service) pushMessage(msg *message) {
+	this_.wkrPool[msg.cctx.Fd()%len(this_.wkrPool)].push(msg)
 }

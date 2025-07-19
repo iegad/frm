@@ -10,6 +10,7 @@ import (
 // ConnContext 连接上下文
 type ConnContext struct {
 	c             gnet.Conn // 原始连接
+	fd            int       // 文件描述符
 	upgraded      bool      // websocket 使用
 	lastUpdate    int64     // 最后接收消息时间
 	server        IServer   // 所属服务
@@ -35,11 +36,16 @@ func (this_ *ConnContext) Init(c gnet.Conn, server IServer) {
 // Reset 重置
 func (this_ *ConnContext) Reset() {
 	this_.c.SetContext(nil)
+	this_.fd = 0
 }
 
 // Fd 获取 socket 文件描述符
 func (this_ *ConnContext) Fd() int {
-	return this_.c.Fd()
+	if this_.fd == 0 {
+		this_.fd = this_.c.Fd()
+	}
+
+	return this_.fd
 }
 
 // Close 关闭连接

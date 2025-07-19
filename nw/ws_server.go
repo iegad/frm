@@ -99,6 +99,6 @@ func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 	cctx.c.Discard(n)
 	cctx.lastUpdate = time.Now().Unix()
 
-	this_.owner.messageCh <- msg
+	this_.owner.pushMessage(msg)
 	return gnet.None
 }

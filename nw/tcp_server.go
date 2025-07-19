@@ -68,7 +68,7 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 
 	// 使用baseServer的消息池
 	msg := this_.msgPool.Get(cctx, data[TCP_HEADER_SIZE:])
-	this_.owner.messageCh <- msg
+	this_.owner.pushMessage(msg)
 	return gnet.None
 }
 

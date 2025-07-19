@@ -2,6 +2,7 @@ package nw
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // message 消息
@@ -80,4 +81,60 @@ func (this_ *messagePool) Put(msg *message) {
 	if msg != nil {
 		this_.pool.Put(msg)
 	}
+}
+
+type messageWorker struct {
+	ch      chan *message
+	stopC   chan bool
+	handle  func(*message)
+	running int32
+}
+
+func newMessageWorker(handle func(*message)) *messageWorker {
+	return &messageWorker{
+		handle:  handle,
+		running: 0,
+	}
+}
+
+func (this_ *messageWorker) run(wg *sync.WaitGroup) {
+	if !atomic.CompareAndSwapInt32(&this_.running, 0, 1) {
+		return
+	}
+
+	this_.ch = make(chan *message, DEFAULT_CHAN_SIZE)
+	this_.stopC = make(chan bool, 1)
+
+MSG_LOOP:
+	for {
+		select {
+		case msg := <-this_.ch:
+			this_.handle(msg)
+
+		case <-this_.stopC:
+			break MSG_LOOP
+		}
+	}
+
+	close(this_.ch)
+	close(this_.stopC)
+
+	for msg := range this_.ch {
+		this_.handle(msg)
+	}
+
+	atomic.StoreInt32(&this_.running, 0)
+	wg.Done()
+}
+
+func (this_ *messageWorker) push(msg *message) {
+	this_.ch <- msg
+}
+
+func (this_ *messageWorker) stop() {
+	if atomic.LoadInt32(&this_.running) == 0 {
+		return
+	}
+
+	this_.stopC <- true
 }

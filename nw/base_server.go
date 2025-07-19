@@ -11,7 +11,7 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
-const HEART_BEAT_INTERVAL = 15 * time.Second // 心跳间隔时间
+const HEART_BEAT_INTERVAL = 15 * time.Second // 心跳检查周期
 
 // IServer 服务接口
 type IServer interface {
