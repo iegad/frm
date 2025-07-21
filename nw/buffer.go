@@ -149,8 +149,8 @@ type BufferPool struct {
 }
 
 // NewBufferPool 创建缓冲区池
-func NewBufferPool() *BufferPool {
-	return &BufferPool{
+func NewBufferPool() BufferPool {
+	return BufferPool{
 		pool: sync.Pool{
 			New: func() any {
 				return NewBuffer()

@@ -3,7 +3,6 @@ package nw
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -27,12 +26,12 @@ type baseServer struct {
 	gnet.BuiltinEventEngine
 	eng gnet.Engine
 
-	owner    *Service    // 所属服务
-	wbufPool *BufferPool // 写对象池
-	msgPool  messagePool // 消息对象池
-	server   IServer     // 实际的服务
-	host     string      // 监听地址
-	cctxPool sync.Pool   // ConnContext 对象池
+	owner    *Service        // 所属服务
+	server   IServer         // 实际的服务
+	host     string          // 监听地址
+	cctxPool connContextPool // ConnContext 对象池
+	wbufPool BufferPool      // 写对象池
+	msgPool  messagePool     // 消息对象池
 }
 
 // newBaseServer 构造函数
@@ -43,11 +42,7 @@ func newBaseServer(owner *Service, server IServer, host string) *baseServer {
 		msgPool:  newMessagePool(),
 		server:   server,
 		host:     fmt.Sprintf("tcp://%v", host),
-		cctxPool: sync.Pool{
-			New: func() any {
-				return &ConnContext{}
-			},
-		},
+		cctxPool: newConnContextPool(),
 	}
 }
 
@@ -69,16 +64,16 @@ func (this_ *baseServer) OnBoot(eng gnet.Engine) gnet.Action {
 
 // OnOpen 客户端连接事件
 func (this_ *baseServer) OnOpen(c gnet.Conn) ([]byte, gnet.Action) {
-	if this_.owner.conns.Count() >= this_.owner.info.MaxConn {
+	if this_.owner.info.MaxConn > 0 && this_.owner.conns.Count() >= this_.owner.info.MaxConn {
 		return nil, gnet.Close
 	}
 
-	cctx := this_.getConnContext()
+	cctx := this_.cctxPool.get()
 	cctx.Init(c, this_)
 
 	if err := this_.owner.event.OnConnected(cctx); err != nil {
 		log.Error("[%d:%v] connected failed: %v", err)
-		this_.putConnContext(cctx)
+		this_.cctxPool.put(cctx)
 		return nil, gnet.Close
 	}
 
@@ -93,7 +88,7 @@ func (this_ *baseServer) OnClose(c gnet.Conn, err error) gnet.Action {
 
 	this_.owner.conns.Remove(cctx.Fd())
 	this_.owner.event.OnDisconnected(cctx)
-	this_.putConnContext(cctx)
+	this_.cctxPool.put(cctx)
 	return gnet.None
 }
 
@@ -122,17 +117,6 @@ func (this_ *baseServer) Stop() {
 // Write 向客户端发送数据
 func (this_ *baseServer) Write(cctx *ConnContext, data []byte) error {
 	return this_.server.Write(cctx, data)
-}
-
-// getConnContext 从 cctxPool 对象池中获取数据, 目的是减少GC开的销
-func (this_ *baseServer) getConnContext() *ConnContext {
-	return this_.cctxPool.Get().(*ConnContext)
-}
-
-// putConnContext 将cctx 对象还给 cctxPool 对象池
-func (this_ *baseServer) putConnContext(cctx *ConnContext) {
-	cctx.Reset()
-	this_.cctxPool.Put(cctx)
 }
 
 // Run 启动服务

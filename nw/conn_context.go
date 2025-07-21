@@ -1,6 +1,7 @@
 package nw
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gox/frm/log"
@@ -96,4 +97,29 @@ func (this_ *ConnContext) SetUserData(ud any) {
 // Write 发送数据
 func (this_ *ConnContext) Write(data []byte) error {
 	return this_.server.Write(this_, data)
+}
+
+type connContextPool struct {
+	pool sync.Pool
+}
+
+func newConnContextPool() connContextPool {
+	return connContextPool{
+		pool: sync.Pool{
+			New: func() any {
+				return &ConnContext{}
+			},
+		},
+	}
+}
+
+func (this_ *connContextPool) get() *ConnContext {
+	return this_.pool.Get().(*ConnContext)
+}
+
+func (this_ *connContextPool) put(cctx *ConnContext) {
+	if cctx != nil {
+		cctx.Reset()
+		this_.pool.Put(cctx)
+	}
 }
