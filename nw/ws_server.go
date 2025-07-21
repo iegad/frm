@@ -95,7 +95,7 @@ func (this_ *wsServer) readData(cctx *ConnContext) gnet.Action {
 		return gnet.Close
 	}
 
-	msg := this_.msgPool.GetRef(cctx, data)
+	msg := this_.msgPool.NewWithData(cctx, data)
 	cctx.c.Discard(n)
 	cctx.lastUpdate = time.Now().Unix()
 

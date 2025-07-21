@@ -67,16 +67,13 @@ func (this_ *tcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 	cctx.lastUpdate = time.Now().Unix()
 
 	// 使用baseServer的消息池
-	msg := this_.msgPool.Get(cctx, data[TCP_HEADER_SIZE:])
-	this_.owner.pushMessage(msg)
+	this_.owner.pushMessage(this_.msgPool.New(cctx, data[TCP_HEADER_SIZE:]))
 	return gnet.None
 }
 
 func (this_ *tcpServer) Write(cctx *ConnContext, data []byte) error {
 	buf := this_.wbufPool.Get()
-	dlen := len(data)
-	header := uint32(dlen) ^ this_.headBlend
-	buf.WriteUint32BE(header)
+	buf.WriteUint32BE(uint32(len(data)) ^ this_.headBlend)
 	buf.Write(data)
 
 	return cctx.c.AsyncWrite(buf.Bytes(), func(c gnet.Conn, err error) error {

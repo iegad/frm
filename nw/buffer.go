@@ -79,17 +79,6 @@ func (this_ *Buffer) WriteUint32BE(v uint32) {
 	this_.length += 4
 }
 
-// Read 实现 io.Reader 接口，从缓冲区读取数据
-func (this_ *Buffer) Read(data []byte) (int, error) {
-	if this_.offset >= this_.length {
-		return 0, io.EOF
-	}
-
-	n := copy(data, this_.buf[this_.offset:this_.length])
-	this_.offset += n
-	return n, nil
-}
-
 // ReadUint32BE 读取大端序 uint32 值
 func (this_ *Buffer) ReadUint32BE() (uint32, error) {
 	if this_.offset+4 > this_.length {
@@ -105,42 +94,6 @@ func (this_ *Buffer) ReadUint32BE() (uint32, error) {
 func (this_ *Buffer) Reset() {
 	this_.offset = 0
 	this_.length = 0
-}
-
-// ResetRead 重置读取位置（保持数据不变）
-func (this_ *Buffer) ResetRead() {
-	this_.offset = 0
-}
-
-// String 返回缓冲区内容的字符串表示
-func (this_ *Buffer) String() string {
-	return string(this_.buf[:this_.length])
-}
-
-// Truncate 截断缓冲区到指定长度
-func (this_ *Buffer) Truncate(n int) {
-	if n < 0 || n > this_.length {
-		return
-	}
-	this_.length = n
-	if this_.offset > this_.length {
-		this_.offset = this_.length
-	}
-}
-
-// Next 返回下一个n字节的数据，并推进读取位置
-func (this_ *Buffer) Next(n int) []byte {
-	if n <= 0 {
-		return nil
-	}
-
-	if this_.offset+n > this_.length {
-		n = this_.length - this_.offset
-	}
-
-	data := this_.buf[this_.offset : this_.offset+n]
-	this_.offset += n
-	return data
 }
 
 // BufferPool 缓冲区池

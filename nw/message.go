@@ -16,7 +16,7 @@ type message struct {
 // release 释放消息对象到对象池中
 func (this_ *message) release() {
 	if this_.msgPool != nil {
-		this_.msgPool.Put(this_)
+		this_.msgPool.Free(this_)
 	}
 }
 
@@ -45,12 +45,12 @@ func newMessagePool() messagePool {
 	}
 }
 
-// Get 从池中获取一个 message 对象
+// New 从池中获取一个 message 对象
 // cctx: 消息的发送者上下文
 // data: 消息数据
 // 返回一个 message 对象, 该对象已经初始化, 可以直接使用
 // 注意: 使用完毕后需要调用 Put 方法归还对象到池中
-func (this_ *messagePool) Get(cctx *ConnContext, data []byte) *message {
+func (this_ *messagePool) New(cctx *ConnContext, data []byte) *message {
 	msg := this_.pool.Get().(*message)
 	msg.cctx = cctx
 	msg.len = len(data)
@@ -63,7 +63,7 @@ func (this_ *messagePool) Get(cctx *ConnContext, data []byte) *message {
 	return msg
 }
 
-func (this_ *messagePool) GetRef(cctx *ConnContext, data []byte) *message {
+func (this_ *messagePool) NewWithData(cctx *ConnContext, data []byte) *message {
 	msg := this_.pool.Get().(*message)
 	msg.cctx = cctx
 	msg.len = len(data)
@@ -72,17 +72,18 @@ func (this_ *messagePool) GetRef(cctx *ConnContext, data []byte) *message {
 	return msg
 }
 
-// Put 归还 message 对象到池中
+// Free 归还 message 对象到池中
 // msg: 要归还的 message 对象
 // 注意: 归还的对象不能为 nil, 否则会导致 panic
 // 归还后, 对象会被重置, 下次获取时会重新初始化
 // 如果 msg 为 nil, 则什么都不做
-func (this_ *messagePool) Put(msg *message) {
+func (this_ *messagePool) Free(msg *message) {
 	if msg != nil {
 		this_.pool.Put(msg)
 	}
 }
 
+// messageWorker Message 工作者
 type messageWorker struct {
 	ch      chan *message
 	stopC   chan bool
