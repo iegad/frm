@@ -20,17 +20,6 @@ func NewBuffer() *Buffer {
 	}
 }
 
-// NewBufferWithCap 创建指定容量的缓冲区
-func NewBufferWithCap(capacity int) *Buffer {
-	if capacity <= 0 {
-		capacity = 2048
-	}
-
-	return &Buffer{
-		buf: make([]byte, capacity),
-	}
-}
-
 // Len 返回缓冲区中数据的长度
 func (this_ *Buffer) Len() int {
 	return this_.length
@@ -83,46 +72,11 @@ func (this_ *Buffer) Write(data []byte) (int, error) {
 	return dlen, nil
 }
 
-// WriteUint16BE 写入大端序 uint16 值
-func (this_ *Buffer) WriteUint16BE(v uint16) {
-	this_.Grow(2)
-	binary.BigEndian.PutUint16(this_.buf[this_.length:], v)
-	this_.length += 2
-}
-
 // WriteUint32BE 写入大端序 uint32 值
 func (this_ *Buffer) WriteUint32BE(v uint32) {
 	this_.Grow(4)
 	binary.BigEndian.PutUint32(this_.buf[this_.length:], v)
 	this_.length += 4
-}
-
-// WriteUint64BE 写入大端序 uint64 值
-func (this_ *Buffer) WriteUint64BE(v uint64) {
-	this_.Grow(8)
-	binary.BigEndian.PutUint64(this_.buf[this_.length:], v)
-	this_.length += 8
-}
-
-// WriteUint16LE 写入小端序 uint16 值
-func (this_ *Buffer) WriteUint16LE(v uint16) {
-	this_.Grow(2)
-	binary.LittleEndian.PutUint16(this_.buf[this_.length:], v)
-	this_.length += 2
-}
-
-// WriteUint32LE 写入小端序 uint32 值
-func (this_ *Buffer) WriteUint32LE(v uint32) {
-	this_.Grow(4)
-	binary.LittleEndian.PutUint32(this_.buf[this_.length:], v)
-	this_.length += 4
-}
-
-// WriteUint64LE 写入小端序 uint64 值
-func (this_ *Buffer) WriteUint64LE(v uint64) {
-	this_.Grow(8)
-	binary.LittleEndian.PutUint64(this_.buf[this_.length:], v)
-	this_.length += 8
 }
 
 // Read 实现 io.Reader 接口，从缓冲区读取数据
@@ -136,17 +90,6 @@ func (this_ *Buffer) Read(data []byte) (int, error) {
 	return n, nil
 }
 
-// ReadUint16BE 读取大端序 uint16 值
-func (this_ *Buffer) ReadUint16BE() (uint16, error) {
-	if this_.offset+2 > this_.length {
-		return 0, io.EOF
-	}
-
-	v := binary.BigEndian.Uint16(this_.buf[this_.offset:])
-	this_.offset += 2
-	return v, nil
-}
-
 // ReadUint32BE 读取大端序 uint32 值
 func (this_ *Buffer) ReadUint32BE() (uint32, error) {
 	if this_.offset+4 > this_.length {
@@ -155,50 +98,6 @@ func (this_ *Buffer) ReadUint32BE() (uint32, error) {
 
 	v := binary.BigEndian.Uint32(this_.buf[this_.offset:])
 	this_.offset += 4
-	return v, nil
-}
-
-// ReadUint64BE 读取大端序 uint64 值
-func (this_ *Buffer) ReadUint64BE() (uint64, error) {
-	if this_.offset+8 > this_.length {
-		return 0, io.EOF
-	}
-
-	v := binary.BigEndian.Uint64(this_.buf[this_.offset:])
-	this_.offset += 8
-	return v, nil
-}
-
-// ReadUint16LE 读取小端序 uint16 值
-func (this_ *Buffer) ReadUint16LE() (uint16, error) {
-	if this_.offset+2 > this_.length {
-		return 0, io.EOF
-	}
-
-	v := binary.LittleEndian.Uint16(this_.buf[this_.offset:])
-	this_.offset += 2
-	return v, nil
-}
-
-// ReadUint32LE 读取小端序 uint32 值
-func (this_ *Buffer) ReadUint32LE() (uint32, error) {
-	if this_.offset+4 > this_.length {
-		return 0, io.EOF
-	}
-
-	v := binary.LittleEndian.Uint32(this_.buf[this_.offset:])
-	this_.offset += 4
-	return v, nil
-}
-
-// ReadUint64LE 读取小端序 uint64 值
-func (this_ *Buffer) ReadUint64LE() (uint64, error) {
-	if this_.offset+8 > this_.length {
-		return 0, io.EOF
-	}
-
-	v := binary.LittleEndian.Uint64(this_.buf[this_.offset:])
-	this_.offset += 8
 	return v, nil
 }
 
@@ -255,17 +154,6 @@ func NewBufferPool() *BufferPool {
 		pool: sync.Pool{
 			New: func() any {
 				return NewBuffer()
-			},
-		},
-	}
-}
-
-// NewBufferPoolWithCap 创建指定容量的缓冲区池
-func NewBufferPoolWithCap(capacity int) *BufferPool {
-	return &BufferPool{
-		pool: sync.Pool{
-			New: func() any {
-				return NewBufferWithCap(capacity)
 			},
 		},
 	}

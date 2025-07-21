@@ -12,7 +12,7 @@ import (
 )
 
 // Protocol 网络协议
-type Protocol int32
+type Protocol int
 
 const (
 	Protocol_None      Protocol = 0
