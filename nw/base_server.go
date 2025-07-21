@@ -133,7 +133,7 @@ func Run(server IServer) error {
 		gnet.WithTCPKeepAlive(time.Second*30),
 		gnet.WithTCPKeepCount(2),
 		gnet.WithTCPKeepInterval(time.Second*10),
-		gnet.WithReadBufferCap(1024*10),
+		gnet.WithReadBufferCap(4096),
 		gnet.WithLockOSThread(false),
 	)
 }
