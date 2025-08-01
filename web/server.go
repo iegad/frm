@@ -29,9 +29,10 @@ func NewServer(host string, release, allowCors bool) (*Server, error) {
 	if allowCors {
 		// Gin示例
 		router.Use(cors.New(cors.Config{
-			AllowOrigins:     []string{"*"},
-			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Token", "X-Code", "X-Staff-ID"},
+			AllowOrigins: []string{"*"},
+			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			// AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Token", "X-Code", "X-Staff-ID", "X-UUID"},
+			AllowHeaders:     []string{"*"},
 			ExposeHeaders:    []string{"Content-Length"},
 			AllowCredentials: true,
 			MaxAge:           12 * 60 * 60,

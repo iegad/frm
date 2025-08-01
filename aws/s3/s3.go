@@ -71,6 +71,13 @@ func Init(conf *Config) error {
 	return nil
 }
 
+func (this_ *awss3) GetObject(key string) (*s3.GetObjectOutput, error) {
+	return this_.c.GetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(this_.cfg.Bucket),
+		Key:    &key,
+	})
+}
+
 func (this_ *awss3) DeleteObject(key, version string) error {
 	input := &s3.DeleteObjectInput{
 		Bucket: aws.String(this_.cfg.Bucket),
